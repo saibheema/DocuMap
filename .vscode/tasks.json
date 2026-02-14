@@ -1,0 +1,218 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "DocuMap: Run full stack dev",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"dev"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "DocuMap: API endpoint smoke test",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build",
+				"-w",
+				"@documap/api",
+				"&&",
+				"node",
+				"apps/api/dist/server.js",
+				">/tmp/documap-api.log",
+				"2>&1",
+				"&",
+				"API_PID=$!;",
+				"sleep",
+				"1;",
+				"node",
+				"scripts/smoke-endpoints.mjs;",
+				"TEST_RC=$?;",
+				"kill",
+				"$API_PID",
+				">/dev/null",
+				"2>&1;",
+				"wait",
+				"$API_PID",
+				">/dev/null",
+				"2>&1;",
+				"exit",
+				"$TEST_RC"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: API endpoint smoke test",
+			"type": "shell",
+			"command": "npm run build -w @documap/api && node apps/api/dist/server.js >/tmp/documap-api.log 2>&1 & API_PID=$!; sleep 1; node scripts/smoke-endpoints.mjs; TEST_RC=$?; kill $API_PID >/dev/null 2>&1; wait $API_PID >/dev/null 2>&1; exit $TEST_RC",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: upload-file endpoint test",
+			"type": "shell",
+			"command": "npm run build -w @documap/api && node apps/api/dist/server.js >/tmp/documap-api.log 2>&1 & API_PID=$!; sleep 1; echo 'Invoice #: INV-9001\nTotal Amount: 42.50' >/tmp/source_test.txt; textutil -convert pdf /tmp/source_test.txt -output /tmp/Source1_test.pdf; HTTP_CODE=$(curl -s -o /tmp/upload_file_resp.json -w '%{http_code}' -H 'x-tenant-id: acme-test' -F 'file=@/tmp/Source1_test.pdf;type=application/pdf' http://localhost:4000/upload/file); echo \"UPLOAD_FILE_HTTP=$HTTP_CODE\"; cat /tmp/upload_file_resp.json; TEST_RC=0; if [ \"$HTTP_CODE\" -lt 200 ] || [ \"$HTTP_CODE\" -ge 300 ]; then TEST_RC=1; fi; kill $API_PID >/dev/null 2>&1; wait $API_PID >/dev/null 2>&1; exit $TEST_RC",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: upload-file endpoint test",
+			"type": "shell",
+			"command": "npm run build -w @documap/api && node apps/api/dist/server.js >/tmp/documap-api.log 2>&1 & API_PID=$!; sleep 1; printf 'Invoice #: INV-9001\\nTotal Amount: 42.50\\n' >/tmp/source_test.txt; textutil -convert pdf /tmp/source_test.txt -output /tmp/Source1_test.pdf; HTTP_CODE=$(curl -s -o /tmp/upload_file_resp.json -w '%{http_code}' -H 'x-tenant-id: acme-test' -F 'file=@/tmp/Source1_test.pdf;type=application/pdf' http://localhost:4000/upload/file); echo \"UPLOAD_FILE_HTTP=$HTTP_CODE\"; cat /tmp/upload_file_resp.json; TEST_RC=0; if [ \"$HTTP_CODE\" -lt 200 ] || [ \"$HTTP_CODE\" -ge 300 ]; then TEST_RC=1; fi; kill $API_PID >/dev/null 2>&1; wait $API_PID >/dev/null 2>&1; exit $TEST_RC",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: upload-file endpoint test v2",
+			"type": "shell",
+			"command": "npm run build -w @documap/api && node apps/api/dist/server.js >/tmp/documap-api.log 2>&1 & API_PID=$!; sleep 1; curl -L -s -o /tmp/Source1_test.pdf https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf; HTTP_CODE=$(curl -s -o /tmp/upload_file_resp.json -w '%{http_code}' -H 'x-tenant-id: acme-test' -F 'file=@/tmp/Source1_test.pdf;filename=Source1_test.pdf;type=application/pdf' http://localhost:4000/upload/file); echo \"UPLOAD_FILE_HTTP=$HTTP_CODE\"; cat /tmp/upload_file_resp.json; TEST_RC=0; if [ \"$HTTP_CODE\" -lt 200 ] || [ \"$HTTP_CODE\" -ge 299 ]; then TEST_RC=1; fi; kill $API_PID >/dev/null 2>&1; wait $API_PID >/dev/null 2>&1; exit $TEST_RC",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: API endpoint smoke test v2",
+			"type": "shell",
+			"command": "npm run build -w @documap/api && node apps/api/dist/server.js >/tmp/documap-api.log 2>&1 & API_PID=$!; sleep 1; node scripts/smoke-endpoints.mjs; TEST_RC=$?; kill $API_PID >/dev/null 2>&1; wait $API_PID >/dev/null 2>&1; exit $TEST_RC",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: upload-file extraction check",
+			"type": "shell",
+			"command": "npm run build -w @documap/api && node apps/api/dist/server.js >/tmp/documap-api.log 2>&1 & API_PID=$!; sleep 1; curl -L -s -o /tmp/Source1_test.pdf https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf; curl -s -H 'x-tenant-id: default-tenant' -F 'file=@/tmp/Source1_test.pdf;filename=Source1_test.pdf;type=application/pdf' http://localhost:4000/upload/file; TEST_RC=$?; kill $API_PID >/dev/null 2>&1; wait $API_PID >/dev/null 2>&1; exit $TEST_RC",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: test attached PDF extraction",
+			"type": "shell",
+			"command": "npm run build -w @documap/api && node apps/api/dist/server.js >/tmp/documap-api.log 2>&1 & API_PID=$!; sleep 1; echo 'Uploading attached file...'; curl -s -H 'x-tenant-id: default-tenant' -F 'file=@/Users/sai/Downloads/Source1_Audit Report-CIL-006375-IU.pdf;filename=Source1_Audit Report-CIL-006375-IU.pdf;type=application/pdf' http://localhost:4000/upload/file >/tmp/upload_attached_resp.json; echo 'Upload response:'; cat /tmp/upload_attached_resp.json; FILE_ID=$(jq -r '.fileId // empty' /tmp/upload_attached_resp.json); echo; echo 'Extracted fields preview:'; if [ -n \"$FILE_ID\" ]; then curl -s -H 'x-tenant-id: default-tenant' http://localhost:4000/upload | jq --arg id \"$FILE_ID\" '.items[] | select(.fileId==$id) | {fileName, status, extractedCount:(.extractedFields|length), extractedFields:(.extractedFields[0:25])}'; else echo 'No fileId returned from upload.'; fi; TEST_RC=0; if [ -z \"$FILE_ID\" ]; then TEST_RC=1; fi; kill $API_PID >/dev/null 2>&1; wait $API_PID >/dev/null 2>&1; exit $TEST_RC",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: OCR capability check",
+			"type": "shell",
+			"command": "which pdftoppm >/tmp/pdftoppm_path.txt 2>/tmp/pdftoppm_err.txt; echo PDFTOPPM_RC=$?; cat /tmp/pdftoppm_path.txt; which tesseract >/tmp/tesseract_path.txt 2>/tmp/tesseract_err.txt; echo TESSERACT_RC=$?; cat /tmp/tesseract_path.txt",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: check brew",
+			"type": "shell",
+			"command": "brew --version",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: install OCR tools",
+			"type": "shell",
+			"command": "brew install poppler tesseract",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: verify OCR tools",
+			"type": "shell",
+			"command": "which pdftoppm && pdftoppm -v | head -n 1; which tesseract && tesseract --version | head -n 1",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: install OCR tools retry",
+			"type": "shell",
+			"command": "HOMEBREW_NO_AUTO_UPDATE=1 brew install poppler tesseract",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: clear brew lock",
+			"type": "shell",
+			"command": "ps aux | grep '[b]rew install' || true; pkill -f 'brew install poppler tesseract' || true; rm -f /opt/homebrew/var/homebrew/locks/poppler.formula.lock /opt/homebrew/var/homebrew/locks/tesseract.formula.lock /opt/homebrew/var/homebrew/locks/*.lock || true; echo 'brew lock cleanup done'",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: install OCR tools final",
+			"type": "shell",
+			"command": "HOMEBREW_NO_AUTO_UPDATE=1 brew install poppler tesseract",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: verify OCR tools v2",
+			"type": "shell",
+			"command": "which pdftoppm; which tesseract; pdftoppm -v | head -n 1; tesseract --version | head -n 1",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: build web",
+			"type": "shell",
+			"command": "npm run build -w @documap/web",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: test given file via API upload",
+			"type": "shell",
+			"command": "npm run build -w @documap/api && node apps/api/dist/server.js >/tmp/documap-api.log 2>&1 & API_PID=$!; sleep 1; RESP=$(curl -s -H 'x-tenant-id: default-tenant' -F 'file=@/Users/sai/Desktop/Documap/Source1_Audit Report-CIL-006375-IU.pdf;filename=Source1_Audit Report-CIL-006375-IU.pdf;type=application/pdf' http://localhost:4000/upload/file); echo \"$RESP\"; FILE_ID=$(echo \"$RESP\" | jq -r '.fileId // empty'); if [ -n \"$FILE_ID\" ]; then curl -s -H 'x-tenant-id: default-tenant' http://localhost:4000/upload | jq --arg id \"$FILE_ID\" '.items[] | select(.fileId==$id) | {fileName,status,extractedCount:(.extractedFields|length),sample:(.extractedFields[0:10])}'; fi; TEST_RC=0; kill $API_PID >/dev/null 2>&1; wait $API_PID >/dev/null 2>&1; exit $TEST_RC",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: test given file via API upload v2",
+			"type": "shell",
+			"command": "npm run build -w @documap/api && node apps/api/dist/server.js >/tmp/documap-api.log 2>&1 & API_PID=$!; sleep 1; curl -s -H 'x-tenant-id: default-tenant' -F \"file=@/Users/sai/Desktop/Documap/Source1_Audit Report-CIL-006375-IU.pdf;filename=Source1_Audit Report-CIL-006375-IU.pdf;type=application/pdf\" http://localhost:4000/upload/file > /tmp/documap-upload-test.json; echo 'UPLOAD_RESPONSE'; cat /tmp/documap-upload-test.json; FILE_ID=$(jq -r '.fileId // empty' /tmp/documap-upload-test.json); if [ -n \"$FILE_ID\" ]; then echo 'UPLOAD_DETAILS'; curl -s -H 'x-tenant-id: default-tenant' http://localhost:4000/upload | jq --arg id \"$FILE_ID\" '.items[] | select(.fileId==$id) | {fileName,status,extractedCount:(.extractedFields|length),sample:(.extractedFields[0:10])}'; fi; kill $API_PID >/dev/null 2>&1; wait $API_PID >/dev/null 2>&1; exit 0",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: build api now",
+			"type": "shell",
+			"command": "npm run build -w @documap/api",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: build web after export formats",
+			"type": "shell",
+			"command": "npm run build -w @documap/web",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: build api and web",
+			"type": "shell",
+			"command": "npm run build -w @documap/api && npm run build -w @documap/web",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: repo and firebase checks",
+			"type": "shell",
+			"command": "git rev-parse --is-inside-work-tree 2>/dev/null || echo not-git; git status --short; command -v firebase >/dev/null && firebase --version || echo firebase-cli-missing",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: firebase project check",
+			"type": "shell",
+			"command": "firebase projects:list --json > /tmp/firebase-projects.json 2>/tmp/firebase-projects.err; RC=$?; echo FIREBASE_PROJECTS_RC=$RC; if [ $RC -ne 0 ]; then cat /tmp/firebase-projects.err; else cat /tmp/firebase-projects.json | head -c 1200; fi",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: firebase error details",
+			"type": "shell",
+			"command": "cat /tmp/firebase-projects.err",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: firebase login check",
+			"type": "shell",
+			"command": "firebase login:list",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: firebase active project",
+			"type": "shell",
+			"command": "firebase use",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: gcloud project check",
+			"type": "shell",
+			"command": "gcloud config get-value project 2>/tmp/gcloud_project_err || true; cat /tmp/gcloud_project_err 2>/dev/null || true",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: initialize git repo",
+			"type": "shell",
+			"command": "git init -b main && git add . && git status --short | head -n 40",
+			"isBackground": false
+		}
+	]
+}

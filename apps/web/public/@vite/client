@@ -1,0 +1,2 @@
+// no-op placeholder for stale Vite client requests
+export {};

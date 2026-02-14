@@ -1,0 +1,2 @@
+// no-op placeholder for stale React refresh requests
+export {};

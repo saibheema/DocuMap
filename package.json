@@ -1,0 +1,19 @@
+{
+  "name": "documap",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w @documap/web\" \"npm run dev -w @documap/api\"",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "start": "concurrently \"npm run start -w @documap/web\" \"npm run start -w @documap/api\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "typescript": "^5.8.2"
+  }
+}

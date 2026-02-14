@@ -1,0 +1,15 @@
+{
+  "name": "@documap/shared",
+  "private": false,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "echo \"No linter configured for shared yet\""
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

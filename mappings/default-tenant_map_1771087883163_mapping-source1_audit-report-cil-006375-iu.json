@@ -1,0 +1,24 @@
+{
+  "id": "map_1771087883163",
+  "tenantId": "default-tenant",
+  "name": "mapping-Source1_Audit Report-CIL-006375-IU",
+  "fileId": "file_1771087827628",
+  "fileName": "Source1_Audit Report-CIL-006375-IU.pdf",
+  "outputFormat": "pdf",
+  "mappings": [
+    {
+      "sourceType": "field",
+      "sourceKey": "ef_11",
+      "targetType": "field",
+      "targetKey": "owners_capital"
+    },
+    {
+      "sourceType": "field",
+      "sourceKey": "ef_22",
+      "targetType": "field",
+      "targetKey": "total_liabilities"
+    }
+  ],
+  "createdAt": "2026-02-14T16:51:23.163Z",
+  "fileNameOnDisk": "default-tenant_map_1771087883163_mapping-source1_audit-report-cil-006375-iu.json"
+}
