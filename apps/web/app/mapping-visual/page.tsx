@@ -22,14 +22,14 @@ import { SaaSShell } from "../../components/saas-shell";
 import { getTenantId } from "../../lib/api";
 import { OUTPUT_FIELDS } from "@documap/shared";
 
-/* ───── API helpers (direct calls for mapping memory CRUD) ───── */
+/* ───── API helpers ───── */
 
-const isLocal =
+const API_URL = process.env.NEXT_PUBLIC_API_URL || (
   typeof window !== "undefined" &&
-  ["localhost", "127.0.0.1"].includes(window.location.hostname);
-
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || (isLocal ? "http://localhost:4000" : "");
+  ["localhost", "127.0.0.1"].includes(window.location.hostname)
+    ? "http://localhost:4000"
+    : ""
+);
 
 const TENANT = process.env.NEXT_PUBLIC_TENANT_ID || "default-tenant";
 
@@ -51,26 +51,72 @@ type MemoryEntry = {
   lastUsed: string;
 };
 
-type MemoryStore = {
-  tenantId: string;
-  entries: MemoryEntry[];
-  updatedAt: string;
-};
+type MemoryStore = { tenantId: string; entries: MemoryEntry[]; updatedAt: string };
 
-/* ───── custom node components ───── */
+/* ─── Icons (inline SVG for zero deps) ─── */
+
+function IconPlus() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <line x1="7" y1="2" x2="7" y2="12" /><line x1="2" y1="7" x2="12" y2="7" />
+    </svg>
+  );
+}
+
+function IconX() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <line x1="2" y1="2" x2="10" y2="10" /><line x1="10" y1="2" x2="2" y2="10" />
+    </svg>
+  );
+}
+
+function IconRefresh() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+    </svg>
+  );
+}
+
+function IconMap() {
+  return (
+    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+      <rect x="4" y="8" width="16" height="8" rx="4" fill="#DBEAFE" stroke="#93C5FD" strokeWidth="1.5" />
+      <rect x="4" y="20" width="16" height="8" rx="4" fill="#DBEAFE" stroke="#93C5FD" strokeWidth="1.5" />
+      <rect x="4" y="32" width="16" height="8" rx="4" fill="#DBEAFE" stroke="#93C5FD" strokeWidth="1.5" />
+      <rect x="28" y="14" width="16" height="10" rx="5" fill="#D1FAE5" stroke="#6EE7B7" strokeWidth="1.5" />
+      <rect x="28" y="30" width="16" height="10" rx="5" fill="#D1FAE5" stroke="#6EE7B7" strokeWidth="1.5" />
+      <path d="M20 12 L28 19" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M20 24 L28 19" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M20 36 L28 35" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/* ─── Custom Nodes ─── */
 
 function SourceLabelNode({ data }: NodeProps) {
   const d = data as { label: string; onRemove?: () => void };
   return (
-    <div className="group flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 shadow-sm hover:shadow-md transition-shadow min-w-[140px] max-w-[260px]">
-      <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-blue-500 !border-white !border-2" />
-      <span className="text-sm text-gray-800 truncate flex-1" title={d.label}>{d.label}</span>
+    <div className="group relative flex items-center gap-2 rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-white px-3.5 py-2.5 shadow-sm hover:shadow-md hover:border-blue-300 transition-all duration-200 cursor-grab active:cursor-grabbing min-w-[160px] max-w-[280px]">
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="!w-3 !h-3 !bg-blue-500 !border-2 !border-white !shadow-sm !right-[-6px]"
+      />
+      <div className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0" />
+      <span className="text-sm font-medium text-gray-700 truncate flex-1" title={d.label}>
+        {d.label}
+      </span>
       {d.onRemove && (
         <button
           onClick={(e) => { e.stopPropagation(); d.onRemove!(); }}
-          className="opacity-0 group-hover:opacity-100 text-xs text-red-400 hover:text-red-600 transition-opacity ml-1"
+          className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-5 h-5 rounded-full bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-all duration-200"
           title="Remove this source label"
-        >&#10005;</button>
+        >
+          <IconX />
+        </button>
       )}
     </div>
   );
@@ -83,20 +129,41 @@ function TargetFieldNode({ data }: NodeProps) {
     sourceCount: number;
     onAddLabel?: (targetKey: string) => void;
   };
+  const hasLabels = d.sourceCount > 0;
   return (
-    <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50 px-4 py-3 shadow-sm min-w-[200px] max-w-[280px]">
-      <Handle type="target" position={Position.Left} className="!w-3.5 !h-3.5 !bg-emerald-500 !border-white !border-2" />
-      <div className="font-semibold text-gray-900 text-sm">{d.label}</div>
-      <div className="flex items-center justify-between mt-1">
-        <span className="text-xs text-gray-500">
-          {d.sourceCount} source{d.sourceCount !== 1 ? "s" : ""} mapped
-        </span>
+    <div className={`relative rounded-xl border-2 px-4 py-3 shadow-sm hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing min-w-[220px] max-w-[300px] ${
+      hasLabels
+        ? "border-emerald-300 bg-gradient-to-br from-emerald-50 to-green-50"
+        : "border-gray-200 bg-gradient-to-br from-gray-50 to-white border-dashed"
+    }`}>
+      <Handle
+        type="target"
+        position={Position.Left}
+        className={`!w-3.5 !h-3.5 !border-2 !border-white !shadow-sm !left-[-7px] ${
+          hasLabels ? "!bg-emerald-500" : "!bg-gray-400"
+        }`}
+      />
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <div className={`font-semibold text-sm truncate ${hasLabels ? "text-gray-900" : "text-gray-500"}`}>
+            {d.label}
+          </div>
+          <div className="flex items-center gap-1.5 mt-1.5">
+            {hasLabels ? (
+              <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                {d.sourceCount} source{d.sourceCount !== 1 ? "s" : ""}
+              </span>
+            ) : (
+              <span className="text-xs text-gray-400 italic">No sources yet</span>
+            )}
+          </div>
+        </div>
         {d.onAddLabel && (
           <button
             onClick={(e) => { e.stopPropagation(); d.onAddLabel!(d.targetKey); }}
-            className="flex items-center gap-0.5 rounded-md bg-blue-500 px-2 py-0.5 text-xs font-medium text-white hover:bg-blue-600 transition-colors"
+            className="flex items-center gap-1 rounded-lg bg-blue-500 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-blue-600 active:bg-blue-700 transition-colors shadow-sm"
           >
-            <span className="text-sm leading-none">+</span> Add
+            <IconPlus /> Add
           </button>
         )}
       </div>
@@ -104,278 +171,345 @@ function TargetFieldNode({ data }: NodeProps) {
   );
 }
 
-const nodeTypes = {
-  sourceLabel: SourceLabelNode,
-  targetField: TargetFieldNode,
-};
+const nodeTypes = { sourceLabel: SourceLabelNode, targetField: TargetFieldNode };
 
-/* ───── layout helpers ───── */
+/* ─── Layout ─── */
 
-const SOURCE_X = 50;
-const TARGET_X = 550;
-const Y_GAP = 80;
-const GROUP_GAP = 30;
+const SRC_X = 40;
+const TGT_X = 580;
+const ROW_H = 70;
+const GAP = 35;
 
-function buildNodesAndEdges(
+function buildGraph(
   entries: MemoryEntry[],
-  onRemoveLabel: (targetKey: string, label: string) => void,
-  onAddLabel: (targetKey: string) => void,
+  onRemove: (k: string, l: string) => void,
+  onAdd: (k: string) => void,
 ): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
 
-  const fieldOrder = new Map<string, number>(OUTPUT_FIELDS.map((f, i) => [f.key, i]));
-  const sorted = [...entries].sort((a, b) => {
-    const oa = fieldOrder.get(a.targetKey) ?? 999;
-    const ob = fieldOrder.get(b.targetKey) ?? 999;
-    return oa - ob || a.targetKey.localeCompare(b.targetKey);
-  });
+  const order = new Map<string, number>(OUTPUT_FIELDS.map((f, i) => [f.key, i]));
+  const sorted = [...entries].sort((a, b) =>
+    (order.get(a.targetKey) ?? 999) - (order.get(b.targetKey) ?? 999) || a.targetKey.localeCompare(b.targetKey)
+  );
 
-  let targetY = 40;
+  let y = 30;
 
   for (const entry of sorted) {
-    const targetId = `target_${entry.targetKey}`;
-    const groupStartY = targetY;
+    const tid = `t_${entry.targetKey}`;
+    const startY = y;
 
-    entry.sourceLabels.forEach((label, li) => {
-      const sourceId = `source_${entry.targetKey}_${li}`;
+    entry.sourceLabels.forEach((label, i) => {
+      const sid = `s_${entry.targetKey}_${i}`;
       nodes.push({
-        id: sourceId,
+        id: sid,
         type: "sourceLabel",
-        position: { x: SOURCE_X, y: groupStartY + li * (Y_GAP - 20) },
-        data: {
-          label,
-          onRemove: () => onRemoveLabel(entry.targetKey, label),
-        },
+        position: { x: SRC_X, y: startY + i * ROW_H },
+        data: { label, onRemove: () => onRemove(entry.targetKey, label) },
         draggable: true,
       });
-
       edges.push({
-        id: `edge_${sourceId}_${targetId}`,
-        source: sourceId,
-        target: targetId,
+        id: `e_${sid}`,
+        source: sid,
+        target: tid,
         type: "smoothstep",
         animated: false,
-        style: { stroke: "#3b82f6", strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#3b82f6" },
+        style: { stroke: "#3b82f6", strokeWidth: 2, strokeDasharray: undefined },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#3b82f6", width: 16, height: 16 },
       });
     });
 
     const centerY = entry.sourceLabels.length > 0
-      ? groupStartY + ((entry.sourceLabels.length - 1) * (Y_GAP - 20)) / 2
-      : groupStartY;
+      ? startY + ((entry.sourceLabels.length - 1) * ROW_H) / 2
+      : startY;
 
+    const field = OUTPUT_FIELDS.find((f) => f.key === entry.targetKey);
     nodes.push({
-      id: targetId,
+      id: tid,
       type: "targetField",
-      position: { x: TARGET_X, y: centerY },
+      position: { x: TGT_X, y: centerY },
       data: {
-        label: OUTPUT_FIELDS.find((f) => f.key === entry.targetKey)?.label || entry.targetKey,
+        label: field?.label || entry.targetKey,
         targetKey: entry.targetKey,
         sourceCount: entry.sourceLabels.length,
-        onAddLabel,
+        onAddLabel: onAdd,
       },
       draggable: true,
     });
 
-    targetY = groupStartY + Math.max(entry.sourceLabels.length, 1) * (Y_GAP - 20) + GROUP_GAP + Y_GAP;
+    y = startY + Math.max(entry.sourceLabels.length, 1) * ROW_H + GAP;
   }
 
-  const usedTargets = new Set(entries.map((e) => e.targetKey));
-  for (const field of OUTPUT_FIELDS) {
-    if (usedTargets.has(field.key)) continue;
-    const targetId = `target_${field.key}`;
+  // Unmapped targets
+  const used = new Set(entries.map((e) => e.targetKey));
+  OUTPUT_FIELDS.forEach((field) => {
+    if (used.has(field.key)) return;
     nodes.push({
-      id: targetId,
+      id: `t_${field.key}`,
       type: "targetField",
-      position: { x: TARGET_X, y: targetY },
-      data: {
-        label: field.label,
-        targetKey: field.key,
-        sourceCount: 0,
-        onAddLabel,
-      },
+      position: { x: TGT_X, y },
+      data: { label: field.label, targetKey: field.key, sourceCount: 0, onAddLabel: onAdd },
       draggable: true,
     });
-    targetY += Y_GAP + 10;
-  }
+    y += ROW_H + 8;
+  });
 
   return { nodes, edges };
 }
 
-/* ───── main page ───── */
+/* ─── Page ─── */
 
 export default function MappingVisualPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const [memoryEntries, setMemoryEntries] = useState<MemoryEntry[]>([]);
+  const [entries, setEntries] = useState<MemoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-
-  const [addModal, setAddModal] = useState<{ targetKey: string; targetLabel: string } | null>(null);
+  const [toast, setToast] = useState<{ text: string; type: "ok" | "err" } | null>(null);
+  const [addModal, setAddModal] = useState<{ key: string; label: string } | null>(null);
   const [newLabel, setNewLabel] = useState("");
 
-  const loadMemory = useCallback(async () => {
+  // Auto-dismiss toasts
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const load = useCallback(async () => {
     try {
-      const store = await api<MemoryStore>("/mapping-memory");
-      setMemoryEntries(store.entries);
+      const s = await api<MemoryStore>("/mapping-memory");
+      setEntries(s.entries);
       setError(null);
     } catch (e) {
-      setMemoryEntries([]);
-      setError(e instanceof Error ? e.message : "Failed to load mapping memory");
+      setEntries([]);
+      setError(e instanceof Error ? e.message : "Could not load mapping memory");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadMemory();
-  }, [loadMemory]);
+  useEffect(() => { load(); }, [load]);
 
-  const handleRemoveLabel = useCallback(async (targetKey: string, label: string) => {
+  const removeLabel = useCallback(async (targetKey: string, label: string) => {
     try {
-      const store = await api<MemoryStore>("/mapping-memory/remove-label", {
-        method: "POST",
-        body: { targetKey, sourceLabel: label },
+      const s = await api<MemoryStore>("/mapping-memory/remove-label", {
+        method: "POST", body: { targetKey, sourceLabel: label },
       });
-      setMemoryEntries(store.entries);
-      setMessage(`Removed "${label}" from ${targetKey}`);
+      setEntries(s.entries);
+      setToast({ text: `Removed "${label}"`, type: "ok" });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to remove label");
+      setToast({ text: e instanceof Error ? e.message : "Remove failed", type: "err" });
     }
   }, []);
 
-  const handleAddLabel = useCallback((targetKey: string) => {
-    const field = OUTPUT_FIELDS.find((f) => f.key === targetKey);
-    setAddModal({ targetKey, targetLabel: field?.label || targetKey });
+  const openAdd = useCallback((targetKey: string) => {
+    const f = OUTPUT_FIELDS.find((o) => o.key === targetKey);
+    setAddModal({ key: targetKey, label: f?.label || targetKey });
     setNewLabel("");
   }, []);
 
-  const submitAddLabel = useCallback(async () => {
+  const submitAdd = useCallback(async () => {
     if (!addModal || !newLabel.trim()) return;
     try {
-      const store = await api<MemoryStore>("/mapping-memory/add-label", {
+      const s = await api<MemoryStore>("/mapping-memory/add-label", {
         method: "POST",
-        body: { targetKey: addModal.targetKey, targetType: "field", sourceLabel: newLabel.trim() },
+        body: { targetKey: addModal.key, targetType: "field", sourceLabel: newLabel.trim() },
       });
-      setMemoryEntries(store.entries);
-      setMessage(`Added "${newLabel.trim()}" to ${addModal.targetLabel}`);
+      setEntries(s.entries);
+      setToast({ text: `Added "${newLabel.trim()}" \u2192 ${addModal.label}`, type: "ok" });
       setAddModal(null);
       setNewLabel("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add label");
+      setToast({ text: e instanceof Error ? e.message : "Add failed", type: "err" });
     }
   }, [addModal, newLabel]);
 
   useEffect(() => {
-    const { nodes: n, edges: e } = buildNodesAndEdges(memoryEntries, handleRemoveLabel, handleAddLabel);
-    setNodes(n);
-    setEdges(e);
-  }, [memoryEntries, handleRemoveLabel, handleAddLabel, setNodes, setEdges]);
+    const g = buildGraph(entries, removeLabel, openAdd);
+    setNodes(g.nodes);
+    setEdges(g.edges);
+  }, [entries, removeLabel, openAdd, setNodes, setEdges]);
 
-  const totalLabels = useMemo(
-    () => memoryEntries.reduce((sum, e) => sum + e.sourceLabels.length, 0),
-    [memoryEntries]
-  );
+  const totalLabels = useMemo(() => entries.reduce((s, e) => s + e.sourceLabels.length, 0), [entries]);
+  const mappedTargets = useMemo(() => entries.filter((e) => e.sourceLabels.length > 0).length, [entries]);
 
-  const totalTargets = useMemo(
-    () => memoryEntries.filter((e) => e.sourceLabels.length > 0).length,
-    [memoryEntries]
-  );
-
+  /* ─── Loading ─── */
   if (loading) {
     return (
       <SaaSShell title="Visual Mapping Board" workspaceLabel={getTenantId()}>
-        <div className="card p-8 text-center text-gray-500">Loading mapping memory...</div>
+        <div className="flex flex-col items-center justify-center py-24">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
+          <p className="mt-4 text-sm text-gray-500">Loading mapping rules...</p>
+        </div>
       </SaaSShell>
     );
   }
 
+  /* ─── Render ─── */
   return (
-    <SaaSShell
-      title="Visual Mapping Board"
-      subtitle="Your mapping rules. Drag to rearrange, click + to add source labels."
-      workspaceLabel={getTenantId()}
-    >
-      {error && <div className="card mb-4 p-3 text-sm text-rose-600">{error}</div>}
-      {message && <div className="card mb-4 p-3 text-sm text-emerald-600">{message}</div>}
-
-      <div className="card mb-4 p-3 flex items-center gap-6 text-sm">
-        <span className="text-gray-600">
-          <span className="font-semibold text-gray-900">{totalTargets}</span> target fields with
-          <span className="font-semibold text-gray-900"> {totalLabels}</span> source label rules
-        </span>
-        <button
-          onClick={loadMemory}
-          className="ml-auto rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-        >
-          Refresh
-        </button>
-      </div>
-
-      <div className="card overflow-hidden" style={{ height: 650 }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          nodeTypes={nodeTypes}
-          fitView
-          fitViewOptions={{ padding: 0.3 }}
-          minZoom={0.3}
-          maxZoom={2}
-          proOptions={{ hideAttribution: true }}
-          defaultEdgeOptions={{
-            type: "smoothstep",
-            style: { stroke: "#3b82f6", strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#3b82f6" },
-          }}
-        >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#e5e7eb" />
-          <Controls showInteractive={false} />
-          <MiniMap
-            nodeColor={(n: Node) => (n.type === "targetField" ? "#d1fae5" : "#dbeafe")}
-            maskColor="rgba(0,0,0,0.08)"
-            style={{ border: "1px solid #e5e7eb" }}
-          />
-          <Panel position="top-left" className="!bg-white/90 !rounded-lg !border !border-gray-200 !px-3 !py-2 !shadow-sm">
-            <div className="text-xs text-gray-500">
-              <span className="inline-block w-3 h-3 rounded bg-blue-100 border border-blue-300 mr-1 align-middle" /> Source labels
-              <span className="mx-2">&rarr;</span>
-              <span className="inline-block w-3 h-3 rounded bg-emerald-100 border border-emerald-300 mr-1 align-middle" /> Target fields
+    <SaaSShell title="Visual Mapping Board" workspaceLabel={getTenantId()}>
+      {/* ── Header bar ── */}
+      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm text-gray-500">
+            Manage your field mapping rules. Source labels on the left map to target output fields on the right.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm shadow-sm">
+            <div>
+              <span className="font-semibold text-gray-900">{mappedTargets}</span>
+              <span className="ml-1 text-gray-500">targets</span>
             </div>
-          </Panel>
-        </ReactFlow>
+            <div className="h-4 w-px bg-gray-200" />
+            <div>
+              <span className="font-semibold text-gray-900">{totalLabels}</span>
+              <span className="ml-1 text-gray-500">rules</span>
+            </div>
+          </div>
+          <button
+            onClick={load}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 shadow-sm hover:bg-gray-50 transition-colors"
+          >
+            <IconRefresh /> Refresh
+          </button>
+        </div>
       </div>
 
+      {/* ── Error banner ── */}
+      {error && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-.75 4a.75.75 0 011.5 0v3a.75.75 0 01-1.5 0V5zm.75 6.5a1 1 0 110-2 1 1 0 010 2z"/></svg>
+          {error}
+        </div>
+      )}
+
+      {/* ── Canvas ── */}
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden" style={{ height: "calc(100vh - 280px)", minHeight: 500 }}>
+        {entries.length === 0 && totalLabels === 0 ? (
+          /* ── Empty state inside canvas area ── */
+          <div className="flex flex-col items-center justify-center h-full text-center px-8">
+            <IconMap />
+            <h3 className="mt-4 text-lg font-semibold text-gray-900">No mapping rules yet</h3>
+            <p className="mt-2 max-w-md text-sm text-gray-500">
+              Upload a PDF in the <span className="font-medium text-blue-600">Upload</span> tab, then map fields in <span className="font-medium text-blue-600">Mapping Studio</span>.
+              Once you save mappings, they appear here as visual rules you can edit.
+            </p>
+            <p className="mt-1 max-w-md text-xs text-gray-400">
+              Or click <span className="font-medium">+ Add</span> on any target field below to manually create rules.
+            </p>
+            <div className="mt-8 pt-6 border-t border-gray-100 w-full max-w-lg">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Target fields available</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {OUTPUT_FIELDS.map((f) => (
+                  <button
+                    key={f.key}
+                    onClick={() => openAdd(f.key)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                  >
+                    <IconPlus /> {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            nodeTypes={nodeTypes}
+            fitView
+            fitViewOptions={{ padding: 0.35 }}
+            minZoom={0.2}
+            maxZoom={2.5}
+            proOptions={{ hideAttribution: true }}
+            defaultEdgeOptions={{
+              type: "smoothstep",
+              style: { stroke: "#3b82f6", strokeWidth: 2 },
+              markerEnd: { type: MarkerType.ArrowClosed, color: "#3b82f6" },
+            }}
+          >
+            <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#e5e7eb" />
+            <Controls
+              showInteractive={false}
+              className="!rounded-lg !border !border-gray-200 !shadow-sm [&>button]:!rounded-md [&>button]:!border-gray-200"
+            />
+            <MiniMap
+              nodeColor={(n: Node) => (n.type === "targetField" ? "#a7f3d0" : "#bfdbfe")}
+              maskColor="rgba(0,0,0,0.06)"
+              className="!rounded-lg !border !border-gray-200 !shadow-sm"
+            />
+            <Panel position="top-left">
+              <div className="rounded-lg border border-gray-200 bg-white/95 backdrop-blur px-3 py-2 shadow-sm text-xs text-gray-500 flex items-center gap-3">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-md bg-gradient-to-r from-blue-100 to-blue-200 border border-blue-300" />
+                  Source labels
+                </span>
+                <span className="text-gray-300">&rarr;</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-md bg-gradient-to-r from-emerald-100 to-emerald-200 border border-emerald-300" />
+                  Target fields
+                </span>
+              </div>
+            </Panel>
+          </ReactFlow>
+        )}
+      </div>
+
+      {/* ── Toast notification ── */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium shadow-lg transition-all duration-300 ${
+          toast.type === "ok" ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
+        }`}>
+          {toast.type === "ok" ? (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm3.03 5.53l-3.5 3.5a.75.75 0 01-1.06 0l-1.5-1.5a.75.75 0 011.06-1.06l.97.97 2.97-2.97a.75.75 0 011.06 1.06z"/></svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-.75 4a.75.75 0 011.5 0v3a.75.75 0 01-1.5 0V5zm.75 6.5a1 1 0 110-2 1 1 0 010 2z"/></svg>
+          )}
+          {toast.text}
+        </div>
+      )}
+
+      {/* ── Add Label Modal ── */}
       {addModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">Add Source Label</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setAddModal(null)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
+                <IconPlus />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Add Source Label</h3>
+                <p className="text-xs text-gray-500">
+                  Map to <span className="font-semibold text-emerald-600">{addModal.label}</span>
+                </p>
+              </div>
+            </div>
             <p className="text-sm text-gray-500 mb-4">
-              Add a new source field name that maps to <span className="font-medium text-emerald-700">{addModal.targetLabel}</span>.
-              This will be remembered for all future file uploads.
+              Type the exact source field name as it appears in your PDF documents. This mapping will be remembered for all future uploads.
             </p>
             <input
               autoFocus
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submitAddLabel()}
+              onKeyDown={(e) => e.key === "Enter" && submitAdd()}
               placeholder="e.g. Current Assets - Closing Balance"
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all"
             />
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setAddModal(null)}
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={submitAddLabel}
+                onClick={submitAdd}
                 disabled={!newLabel.trim()}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+                className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Save Label
               </button>
@@ -384,51 +518,66 @@ export default function MappingVisualPage() {
         </div>
       )}
 
-      {memoryEntries.length > 0 && (
-        <section className="card mt-4 p-4">
-          <h2 className="font-semibold text-gray-900 mb-3">All Mapping Rules</h2>
-          <div className="overflow-auto max-h-96 rounded border border-gray-200">
+      {/* ── Rules table ── */}
+      {entries.length > 0 && (
+        <div className="mt-5 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-gray-100 px-5 py-3 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900 text-sm">All Mapping Rules</h2>
+            <span className="text-xs text-gray-400">{entries.length} entries</span>
+          </div>
+          <div className="overflow-auto max-h-80">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
+              <thead className="sticky top-0 bg-gray-50/95 backdrop-blur border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs text-gray-500">Target Field</th>
-                  <th className="px-4 py-2 text-left text-xs text-gray-500">Source Labels</th>
-                  <th className="px-4 py-2 text-right text-xs text-gray-500">Uses</th>
+                  <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Target Field</th>
+                  <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source Labels</th>
+                  <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Used</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {memoryEntries.map((entry) => (
-                  <tr key={entry.targetKey} className="hover:bg-gray-50/50">
-                    <td className="px-4 py-2 font-medium text-gray-900">
-                      {OUTPUT_FIELDS.find((f) => f.key === entry.targetKey)?.label || entry.targetKey}
+              <tbody className="divide-y divide-gray-50">
+                {entries.map((entry) => (
+                  <tr key={entry.targetKey} className="hover:bg-blue-50/30 transition-colors">
+                    <td className="px-5 py-3 font-medium text-gray-900 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
+                        {OUTPUT_FIELDS.find((f) => f.key === entry.targetKey)?.label || entry.targetKey}
+                      </div>
                     </td>
-                    <td className="px-4 py-2">
-                      <div className="flex flex-wrap gap-1">
+                    <td className="px-5 py-3">
+                      <div className="flex flex-wrap gap-1.5">
                         {entry.sourceLabels.map((label) => (
                           <span
                             key={label}
-                            className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-xs text-blue-700"
+                            className="group inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2.5 py-1 text-xs text-blue-700 hover:border-blue-300 transition-colors"
                           >
                             {label}
                             <button
-                              onClick={() => handleRemoveLabel(entry.targetKey, label)}
-                              className="text-blue-400 hover:text-red-500 ml-0.5"
-                            >&#10005;</button>
+                              onClick={() => removeLabel(entry.targetKey, label)}
+                              className="opacity-50 group-hover:opacity-100 text-blue-400 hover:text-red-500 transition-all"
+                            >
+                              <IconX />
+                            </button>
                           </span>
                         ))}
                         <button
-                          onClick={() => handleAddLabel(entry.targetKey)}
-                          className="rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-500 hover:border-blue-400 hover:text-blue-600"
-                        >+ add</button>
+                          onClick={() => openAdd(entry.targetKey)}
+                          className="inline-flex items-center gap-1 rounded-full border border-dashed border-gray-300 px-2.5 py-1 text-xs text-gray-400 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        >
+                          <IconPlus /> add
+                        </button>
                       </div>
                     </td>
-                    <td className="px-4 py-2 text-right text-gray-500">{entry.usageCount}</td>
+                    <td className="px-5 py-3 text-right">
+                      <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                        {entry.usageCount}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </section>
+        </div>
       )}
     </SaaSShell>
   );
