@@ -7,6 +7,7 @@ const links = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/ingestion", label: "Upload" },
   { href: "/mapping", label: "Mapping Studio" },
+  { href: "/mapping-visual", label: "Visual Map" },
   { href: "/templates", label: "Templates" },
   { href: "/jobs", label: "Jobs" }
 ];
