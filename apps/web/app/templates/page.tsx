@@ -133,28 +133,28 @@ export default function TemplatesPage() {
 
   return (
     <SaaSShell
-      title="Template Library"
-      subtitle="Maintain source-specific mapping templates for each corporate format."
+      title="Templates"
+      subtitle="Create and manage reusable mapping templates for known document formats."
       workspaceLabel={getTenantId()}
     >
-      {error ? <div className="card mb-4 p-3 text-sm text-rose-300">{error}</div> : null}
-      {message ? <div className="card mb-4 p-3 text-sm text-emerald-300">{message}</div> : null}
+      {error ? <div className="card mb-4 p-3 text-sm text-rose-600">{error}</div> : null}
+      {message ? <div className="card mb-4 p-3 text-sm text-emerald-600">{message}</div> : null}
 
       <section className="card mb-6 p-5">
-        <h2 className="font-semibold text-white">Mapping File Backup</h2>
-        <p className="mt-2 text-sm text-slate-300">
-          Download mappings as JSON and upload the file after restart to restore templates.
+        <h2 className="font-semibold text-gray-900">Backup & Restore</h2>
+        <p className="mt-2 text-sm text-gray-600">
+          Export templates as JSON for backup, or import a previously saved file to restore them.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             type="button"
             onClick={onDownload}
-            className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-100"
+            className="rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-900"
           >
-            Download Mapping File
+            Export Templates
           </button>
-          <label className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-100">
-            Upload Mapping File
+          <label className="rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-900">
+            Import Templates
             <input
               type="file"
               accept="application/json"
@@ -166,25 +166,25 @@ export default function TemplatesPage() {
       </section>
 
       <section className="card mb-6 p-5">
-        <h2 className="font-semibold text-white">Create Template</h2>
+        <h2 className="font-semibold text-gray-900">Create Template</h2>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Template name"
-            className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+            className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
           />
           <input
             value={filenamePattern}
             onChange={(e) => setFilenamePattern(e.target.value)}
             placeholder="Filename pattern (optional)"
-            className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+            className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
           />
           <input
             value={textContains}
             onChange={(e) => setTextContains(e.target.value)}
             placeholder="Text contains (optional)"
-            className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+            className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
           />
         </div>
         <button
@@ -197,35 +197,30 @@ export default function TemplatesPage() {
       </section>
 
       <section className="card overflow-hidden">
-        <div className="border-b border-slate-800 px-5 py-4">
-          <h2 className="font-semibold text-white">Saved Templates</h2>
+        <div className="border-b border-gray-200 px-5 py-4">
+          <h2 className="font-semibold text-gray-900">Templates</h2>
         </div>
-        <div className="divide-y divide-slate-800">
+        <div className="divide-y divide-gray-200">
           {templates.map((t) => (
             <div key={t.name} className="grid gap-3 px-5 py-4 md:grid-cols-4 md:items-center">
               <div>
-                <p className="font-medium text-white">{t.name}</p>
-                <p className="text-xs text-slate-400">
+                <p className="font-medium text-gray-900">{t.name}</p>
+                <p className="text-xs text-gray-500">
                   {t.detectionRule.filenamePattern || t.detectionRule.textContains || "No rule"}
                 </p>
               </div>
-              <p className="text-sm text-slate-300">Mappings: {t.mappings.length}</p>
-              <p className="text-sm text-slate-300">Status: {t.active ? "Active" : "Inactive"}</p>
+              <p className="text-sm text-gray-600">Mappings: {t.mappings.length}</p>
+              <p className="text-sm text-gray-600">Status: {t.active ? "Active" : "Inactive"}</p>
               <div className="flex gap-2">
                 <button
-                  className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-200"
-                >
-                  View
-                </button>
-                <button
                   onClick={() => onClone(t.id)}
-                  className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-200"
+                  className="rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-700"
                 >
                   Clone
                 </button>
                 <button
                   onClick={() => onDeactivate(t.id)}
-                  className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-200"
+                  className="rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-700"
                 >
                   {t.active ? "Deactivate" : "Inactive"}
                 </button>

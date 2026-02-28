@@ -3,13 +3,13 @@
 @tailwind utilities;
 
 body {
-  @apply bg-slate-950 text-slate-100;
+  @apply bg-gray-50 text-gray-900;
 }
 
 .card {
-  @apply rounded-xl border border-slate-800 bg-slate-900/80 shadow-sm;
+  @apply rounded-xl border border-gray-200 bg-white shadow-sm;
 }
 
 .glass {
-  @apply border border-slate-800/70 bg-slate-900/50 backdrop-blur;
+  @apply border border-gray-200 bg-white/80 backdrop-blur;
 }

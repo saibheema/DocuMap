@@ -11,10 +11,10 @@ import {
 } from "../../lib/api";
 
 function statusClass(status: string) {
-  if (status === "completed") return "text-emerald-300";
-  if (status === "failed") return "text-rose-300";
-  if (status === "processing") return "text-blue-300";
-  return "text-slate-300";
+  if (status === "completed") return "text-emerald-600";
+  if (status === "failed") return "text-rose-600";
+  if (status === "processing") return "text-blue-600";
+  return "text-gray-600";
 }
 
 export default function JobsPage() {
@@ -55,38 +55,38 @@ export default function JobsPage() {
 
   return (
     <SaaSShell
-      title="Processing Jobs"
-      subtitle="Observe extraction and mapping progress for each corporate submission."
+      title="Jobs"
+      subtitle="Track document extraction and mapping progress."
       workspaceLabel={getTenantId()}
     >
-      {error ? <div className="card mb-4 p-3 text-sm text-rose-300">{error}</div> : null}
+      {error ? <div className="card mb-4 p-3 text-sm text-rose-600">{error}</div> : null}
 
       <section className="card overflow-hidden">
-        <div className="grid grid-cols-4 border-b border-slate-800 px-5 py-3 text-xs uppercase tracking-wide text-slate-400">
+        <div className="grid grid-cols-4 border-b border-gray-200 px-5 py-3 text-xs uppercase tracking-wide text-gray-500">
           <span>Job</span>
           <span>File</span>
           <span>Status</span>
           <span>Template</span>
         </div>
-        <div className="divide-y divide-slate-800">
+        <div className="divide-y divide-gray-200">
           {jobs.map((j) => (
             <div key={j.id} className="grid grid-cols-4 px-5 py-4 text-sm">
-              <span className="text-slate-100">{j.id}</span>
-              <span className="text-slate-300">{j.fileId}</span>
+              <span className="text-gray-900">{j.id}</span>
+              <span className="text-gray-600">{j.fileId}</span>
               <span className={statusClass(j.status)}>{j.status}</span>
-              <div className="flex items-center gap-2 text-slate-300">
+              <div className="flex items-center gap-2 text-gray-600">
                 <span>{j.templateId || "Auto Detect"}</span>
                 <button
                   type="button"
                   onClick={() => runJob(j.fileId)}
-                  className="rounded border border-slate-700 px-2 py-0.5 text-xs"
+                  className="rounded border border-gray-200 px-2 py-0.5 text-xs"
                 >
                   Run
                 </button>
                 <button
                   type="button"
                   onClick={() => setStatus(j.id, "completed")}
-                  className="rounded border border-slate-700 px-2 py-0.5 text-xs"
+                  className="rounded border border-gray-200 px-2 py-0.5 text-xs"
                 >
                   Complete
                 </button>

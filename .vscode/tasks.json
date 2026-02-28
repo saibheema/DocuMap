@@ -213,6 +213,258 @@
 			"type": "shell",
 			"command": "git init -b main && git add . && git status --short | head -n 40",
 			"isBackground": false
+		},
+		{
+			"label": "DocuMap: firebase deploy hosting",
+			"type": "shell",
+			"command": "firebase experiments:enable webframeworks && firebase deploy --only hosting --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: firebase reauth",
+			"type": "shell",
+			"command": "firebase login --reauth",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: firebase deploy retry",
+			"type": "shell",
+			"command": "firebase deploy --only hosting --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: enable firebase project",
+			"type": "shell",
+			"command": "firebase projects:addfirebase cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: firebase deploy final",
+			"type": "shell",
+			"command": "firebase deploy --only hosting --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: create hosting site",
+			"type": "shell",
+			"command": "firebase hosting:sites:create documap-cs-hc-8f0222acc86c43eca440f9a4 --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: deploy hosting configured site",
+			"type": "shell",
+			"command": "firebase deploy --only hosting --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: verify hosting release",
+			"type": "shell",
+			"command": "firebase hosting:releases:list --site documap-cs-hc-8f0222acc86c43eca440f9a4 --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: list hosting channels",
+			"type": "shell",
+			"command": "firebase hosting:channel:list --site documap-cs-hc-8f0222acc86c43eca440f9a4 --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: git status staged",
+			"type": "shell",
+			"command": "git status --short | head -n 30",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: initial git commit",
+			"type": "shell",
+			"command": "git commit -m \"Initial DocuMap app and Firebase deployment setup\"",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: build API image in Cloud Build",
+			"type": "shell",
+			"command": "gcloud builds submit --project cs-hc-8f0222acc86c43eca440f9a4 --config cloudbuild.docker.yaml --substitutions _DOCKERFILE=apps/api/Dockerfile,_IMAGE=gcr.io/cs-hc-8f0222acc86c43eca440f9a4/documap-api:latest",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: check docker",
+			"type": "shell",
+			"command": "docker --version",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: docker auth for gcr",
+			"type": "shell",
+			"command": "gcloud auth configure-docker gcr.io --quiet",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: local build API image",
+			"type": "shell",
+			"command": "docker build -f apps/api/Dockerfile -t gcr.io/cs-hc-8f0222acc86c43eca440f9a4/documap-api:latest .",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: wait docker daemon",
+			"type": "shell",
+			"command": "for i in {1..20}; do docker info >/dev/null 2>&1 && echo DOCKER_READY && exit 0; sleep 2; done; echo DOCKER_NOT_READY; exit 1",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: get project number",
+			"type": "shell",
+			"command": "gcloud projects describe cs-hc-8f0222acc86c43eca440f9a4 --format='value(projectNumber)'",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: grant build storage access",
+			"type": "shell",
+			"command": "gcloud projects add-iam-policy-binding cs-hc-8f0222acc86c43eca440f9a4 --member='serviceAccount:866420239049-compute@developer.gserviceaccount.com' --role='roles/storage.objectViewer' --quiet && gcloud projects add-iam-policy-binding cs-hc-8f0222acc86c43eca440f9a4 --member='serviceAccount:866420239049@cloudbuild.gserviceaccount.com' --role='roles/storage.objectViewer' --quiet",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: cloud build API image retry",
+			"type": "shell",
+			"command": "gcloud builds submit --project cs-hc-8f0222acc86c43eca440f9a4 --config cloudbuild.docker.yaml --substitutions _DOCKERFILE=apps/api/Dockerfile,_IMAGE=gcr.io/cs-hc-8f0222acc86c43eca440f9a4/documap-api:latest",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: grant storage admin",
+			"type": "shell",
+			"command": "gcloud projects add-iam-policy-binding cs-hc-8f0222acc86c43eca440f9a4 --member='serviceAccount:866420239049-compute@developer.gserviceaccount.com' --role='roles/storage.admin' --quiet && gcloud projects add-iam-policy-binding cs-hc-8f0222acc86c43eca440f9a4 --member='serviceAccount:866420239049@cloudbuild.gserviceaccount.com' --role='roles/storage.admin' --quiet",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: local docker build API image retry",
+			"type": "shell",
+			"command": "docker build -f apps/api/Dockerfile -t gcr.io/cs-hc-8f0222acc86c43eca440f9a4/documap-api:latest .",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: check built API image",
+			"type": "shell",
+			"command": "docker images gcr.io/cs-hc-8f0222acc86c43eca440f9a4/documap-api:latest --format 'table {{.Repository}}\\t{{.Tag}}\\t{{.ID}}\\t{{.Size}}'",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: docker build api definitive",
+			"type": "shell",
+			"command": "echo START_BUILD && docker build -f apps/api/Dockerfile -t gcr.io/cs-hc-8f0222acc86c43eca440f9a4/documap-api:latest . && echo BUILD_DONE && docker images gcr.io/cs-hc-8f0222acc86c43eca440f9a4/documap-api:latest --format '{{.Repository}} {{.Tag}} {{.ID}} {{.Size}}'",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: redeploy hosting with API error handling",
+			"type": "shell",
+			"command": "firebase deploy --only hosting --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: redeploy hosting backend hint",
+			"type": "shell",
+			"command": "firebase deploy --only hosting --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: verify live channel timestamp",
+			"type": "shell",
+			"command": "firebase hosting:channel:list --site documap-cs-hc-8f0222acc86c43eca440f9a4 --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: deploy hosting local fallback",
+			"type": "shell",
+			"command": "firebase deploy --only hosting --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: verify hosting timestamp after fallback",
+			"type": "shell",
+			"command": "firebase hosting:channel:list --site documap-cs-hc-8f0222acc86c43eca440f9a4 --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: deploy hosting fix upload 404 fallback",
+			"type": "shell",
+			"command": "firebase deploy --only hosting --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: verify hosting after upload fallback patch",
+			"type": "shell",
+			"command": "firebase hosting:channel:list --site documap-cs-hc-8f0222acc86c43eca440f9a4 --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: deploy hosting ingestion no-api mode",
+			"type": "shell",
+			"command": "firebase deploy --only hosting --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: verify hosting release after ingestion patch",
+			"type": "shell",
+			"command": "firebase hosting:channel:list --site documap-cs-hc-8f0222acc86c43eca440f9a4 --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: deploy hosting message tweak",
+			"type": "shell",
+			"command": "firebase deploy --only hosting --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: verify final hosting timestamp",
+			"type": "shell",
+			"command": "firebase hosting:channel:list --site documap-cs-hc-8f0222acc86c43eca440f9a4 --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: check docker and gcloud auth",
+			"type": "shell",
+			"command": "docker info >/dev/null 2>&1 && echo DOCKER_OK || echo DOCKER_NOT_READY; gcloud auth list --filter=status:ACTIVE --format='value(account)'; gcloud config get-value project",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: build API docker image",
+			"type": "shell",
+			"command": "docker build -f apps/api/Dockerfile -t gcr.io/cs-hc-8f0222acc86c43eca440f9a4/documap-api:latest .",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: verify API image local",
+			"type": "shell",
+			"command": "docker images gcr.io/cs-hc-8f0222acc86c43eca440f9a4/documap-api:latest --format 'table {{.Repository}}\\t{{.Tag}}\\t{{.ID}}\\t{{.Size}}'",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: push API image",
+			"type": "shell",
+			"command": "docker push gcr.io/cs-hc-8f0222acc86c43eca440f9a4/documap-api:latest",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: verify pushed image tag",
+			"type": "shell",
+			"command": "gcloud container images list-tags gcr.io/cs-hc-8f0222acc86c43eca440f9a4/documap-api --limit=3",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: build web for hosted fixes",
+			"type": "shell",
+			"command": "npm run build -w @documap/web",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: deploy hosting OCR and jobs fallback",
+			"type": "shell",
+			"command": "firebase deploy --only hosting --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
+		},
+		{
+			"label": "DocuMap: verify hosting timestamp latest",
+			"type": "shell",
+			"command": "firebase hosting:channel:list --site documap-cs-hc-8f0222acc86c43eca440f9a4 --project cs-hc-8f0222acc86c43eca440f9a4",
+			"isBackground": false
 		}
 	]
 }

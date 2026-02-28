@@ -6,8 +6,10 @@ import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
 import { SaaSShell } from "../../components/saas-shell";
 import {
+  autoApplyMappings,
   generateOutput,
   getTenantId,
+  learnMappings,
   listSavedMappings,
   listUploads,
   saveMapping,
@@ -21,9 +23,11 @@ type MappingRow = {
   sourceKey: string;
   targetType: "field" | "table";
   targetKey: string;
+  autoApplied?: boolean;
 };
 
-type OutputFormat = "pdf" | "excel" | "text";
+type OutputFormat = "pdf" | "excel" | "text" | "csv";
+type OutputMode = "new" | "append";
 
 function inferSourceType(value: string): "field" | "table" {
   const v = value.trim();
@@ -119,12 +123,37 @@ function downloadAsExcel(output: { fields: Record<string, string>; tables: Recor
   XLSX.writeFile(workbook, `${baseName}.xlsx`);
 }
 
+function downloadAsCsv(
+  output: { fields: Record<string, string>; tables: Record<string, string> },
+  baseName: string,
+  fileName: string,
+  mode: OutputMode
+) {
+  // Create CSV row with all field values
+  const headers = Object.keys(output.fields);
+  const values = Object.values(output.fields);
+  
+  let csvContent = "";
+  
+  if (mode === "new") {
+    // New file: include headers and data
+    csvContent = `file_name,${headers.join(",")}\n`;
+    csvContent += `${fileName},${values.join(",")}\n`;
+  } else {
+    // Append mode: only data row (user should ensure headers match)
+    csvContent = `${fileName},${values.join(",")}\n`;
+  }
+  
+  downloadBlob(csvContent, `${baseName}.csv`, "text/csv;charset=utf-8");
+}
+
 export default function MappingPage() {
   const [uploads, setUploads] = useState<UploadReference[]>([]);
   const [savedMappings, setSavedMappings] = useState<SavedMappingRecord[]>([]);
   const [selectedFileId, setSelectedFileId] = useState("");
   const [rows, setRows] = useState<MappingRow[]>([]);
-  const [outputFormat, setOutputFormat] = useState<OutputFormat>("pdf");
+  const [outputFormat, setOutputFormat] = useState<OutputFormat>("csv");
+  const [outputMode, setOutputMode] = useState<OutputMode>("new");
   const [mappingName, setMappingName] = useState("default-mapping");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -173,6 +202,18 @@ export default function MappingPage() {
     if (!mappingName || mappingName === "default-mapping" || mappingName.startsWith("mapping-")) {
       setMappingName(`mapping-${selected.fileName.replace(/\.[^.]+$/, "")}`);
     }
+
+    // Auto-apply saved mappings from memory based on field labels
+    autoApplyMappings(selected.extractedFields).then((autoRows) => {
+      if (autoRows.length > 0) {
+        setRows(autoRows);
+        setMessage(`Auto-applied ${autoRows.length} mapping(s) from memory. Review and adjust as needed.`);
+      } else {
+        setRows([]);
+      }
+    }).catch(() => {
+      setRows([]);
+    });
   }, [selectedFileId, uploads]);
 
   const addRow = () => {
@@ -221,11 +262,13 @@ export default function MappingPage() {
 
       const json = JSON.stringify(result.output, null, 2);
       setGeneratedJson(json);
-      setMessage(`Output generated for ${result.sourceFileName} as ${outputFormat.toUpperCase()}`);
+      setMessage(`Output generated for ${result.sourceFileName} as ${outputFormat.toUpperCase()} (${outputMode === "append" ? "append mode" : "new file"})`);
       setError(null);
 
       const baseName = fileBaseName(result.downloadFileName);
-      if (outputFormat === "text") {
+      if (outputFormat === "csv") {
+        downloadAsCsv(result.output, baseName, result.sourceFileName, outputMode);
+      } else if (outputFormat === "text") {
         downloadAsText(result.output, baseName);
       } else if (outputFormat === "excel") {
         downloadAsExcel(result.output, baseName);
@@ -268,9 +311,15 @@ export default function MappingPage() {
         }))
       });
 
+      // Learn these mappings into memory for auto-apply on future files
+      const currentFile = uploads.find((u) => u.fileId === selectedFileId);
+      if (currentFile) {
+        await learnMappings(validRows, currentFile.extractedFields);
+      }
+
       const response = await listSavedMappings();
       setSavedMappings(response.items);
-      setMessage(`Mapping saved to mappings folder as JSON: ${mappingName.trim()}`);
+      setMessage(`Mapping saved and learned for auto-apply on future files: ${mappingName.trim()}`);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save mapping JSON");
@@ -280,24 +329,21 @@ export default function MappingPage() {
 
   return (
     <SaaSShell
-      title="Mapping Canvas (Pass 1: One Source File)"
-      subtitle="Add only the mappings you need. One source field maps to one output field."
+      title="Mapping Studio"
+      subtitle="Map extracted source fields to your target output schema."
       workspaceLabel={getTenantId()}
     >
-      {error ? <div className="card mb-4 p-3 text-sm text-rose-300">{error}</div> : null}
-      {message ? <div className="card mb-4 p-3 text-sm text-emerald-300">{message}</div> : null}
+      {error ? <div className="card mb-4 p-3 text-sm text-rose-600">{error}</div> : null}
+      {message ? <div className="card mb-4 p-3 text-sm text-emerald-600">{message}</div> : null}
 
       <section className="card mb-4 p-4">
-        <p className="text-sm text-amber-300">
-          Note: source file name must follow <strong>Source1_&lt;filename&gt;</strong> format.
-        </p>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           <label className="text-sm">
-            <span className="text-xs text-slate-400">Select source file</span>
+            <span className="text-xs text-gray-500">Select source file</span>
             <select
               value={selectedFileId}
               onChange={(e) => setSelectedFileId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+              className="mt-1 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-gray-900"
             >
               <option value="">Select</option>
               {uploads.map((u) => (
@@ -307,8 +353,8 @@ export default function MappingPage() {
               ))}
             </select>
           </label>
-          <div className="text-sm text-slate-300">
-            <p className="text-xs text-slate-400">Detected fields available</p>
+          <div className="text-sm text-gray-600">
+            <p className="text-xs text-gray-500">Detected fields available</p>
             <p className="mt-1 text-xl font-semibold">{sourceOptions.length}</p>
           </div>
         </div>
@@ -316,11 +362,11 @@ export default function MappingPage() {
 
       <section className="card p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-semibold text-white">Mapping Canvas</h2>
+          <h2 className="font-semibold text-gray-900">Mapping Canvas</h2>
           <button
             type="button"
             onClick={addRow}
-            className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-100"
+            className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-900"
           >
             Add Mapping Row
           </button>
@@ -330,11 +376,14 @@ export default function MappingPage() {
           {rows.map((row) => {
             const filteredSources = sourceOptions.filter((s) => s.sourceType === row.sourceType);
             return (
-              <div key={row.id} className="grid gap-2 rounded-lg border border-slate-800 p-3 md:grid-cols-6">
+              <div key={row.id} className="grid gap-2 rounded-lg border border-gray-200 p-3 md:grid-cols-6">
+                {row.autoApplied && (
+                  <div className="md:col-span-6 text-xs text-emerald-600 font-medium">✓ Auto-applied from mapping memory</div>
+                )}
                 <select
                   value={row.sourceType}
                   onChange={(e) => updateRow(row.id, { sourceType: e.target.value as "field" | "table", sourceKey: "" })}
-                  className="rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-slate-100"
+                  className="rounded-md border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900"
                 >
                   <option value="field">Source Field</option>
                   <option value="table">Source Table</option>
@@ -343,12 +392,12 @@ export default function MappingPage() {
                 <select
                   value={row.sourceKey}
                   onChange={(e) => updateRow(row.id, { sourceKey: e.target.value })}
-                  className="rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-slate-100 md:col-span-2"
+                  className="rounded-md border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900 md:col-span-2"
                 >
                   <option value="">Select source</option>
                   {filteredSources.map((s) => (
                     <option key={s.key} value={s.key}>
-                      {s.label}
+                      {s.label} → {s.value.length > 60 ? s.value.slice(0, 60) + "…" : s.value}
                     </option>
                   ))}
                 </select>
@@ -356,7 +405,7 @@ export default function MappingPage() {
                 <select
                   value={row.targetType}
                   onChange={(e) => updateRow(row.id, { targetType: e.target.value as "field" | "table", targetKey: "" })}
-                  className="rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-slate-100"
+                  className="rounded-md border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900"
                 >
                   <option value="field">Target Field</option>
                   <option value="table">Target Table</option>
@@ -366,7 +415,7 @@ export default function MappingPage() {
                   <select
                     value={row.targetKey}
                     onChange={(e) => updateRow(row.id, { targetKey: e.target.value })}
-                    className="rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-slate-100 md:col-span-2"
+                    className="rounded-md border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900 md:col-span-2"
                   >
                     <option value="">Select output field</option>
                     {OUTPUT_FIELDS.map((o) => (
@@ -374,20 +423,31 @@ export default function MappingPage() {
                         {o.label}
                       </option>
                     ))}
+                    <option value="__custom">— Custom field name —</option>
                   </select>
                 ) : (
                   <input
                     value={row.targetKey}
                     onChange={(e) => updateRow(row.id, { targetKey: e.target.value })}
                     placeholder="Target table name"
-                    className="rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-slate-100 md:col-span-2"
+                    className="rounded-md border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900 md:col-span-2"
+                  />
+                )}
+
+                {row.targetType === "field" && row.targetKey === "__custom" && (
+                  <input
+                    value=""
+                    onChange={(e) => updateRow(row.id, { targetKey: e.target.value })}
+                    placeholder="Enter custom field name"
+                    className="rounded-md border border-gray-200 bg-white px-2 py-2 text-sm text-gray-900 md:col-span-6"
+                    autoFocus
                   />
                 )}
 
                 <button
                   type="button"
                   onClick={() => removeRow(row.id)}
-                  className="rounded-md border border-slate-700 px-2 py-2 text-xs text-slate-200 md:col-span-6"
+                  className="rounded-md border border-gray-200 px-2 py-2 text-xs text-gray-700 md:col-span-6"
                 >
                   Remove Row
                 </button>
@@ -396,33 +456,48 @@ export default function MappingPage() {
           })}
 
           {rows.length === 0 ? (
-            <p className="text-sm text-slate-400">No mapping rows yet. Click “Add Mapping Row”.</p>
+            <p className="text-sm text-gray-500">No mapping rows yet. Click "Add Mapping Row".</p>
           ) : null}
         </div>
 
         <div className="mt-4 flex flex-wrap items-end gap-3">
           <label className="text-sm">
-            <span className="text-xs text-slate-400">Mapping name</span>
+            <span className="text-xs text-gray-500">Mapping name</span>
             <input
               value={mappingName}
               onChange={(e) => setMappingName(e.target.value)}
               placeholder="e.g. mapping-audit-report"
-              className="mt-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              className="mt-1 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
             />
           </label>
 
           <label className="text-sm">
-            <span className="text-xs text-slate-400">Output format</span>
+            <span className="text-xs text-gray-500">Output format</span>
             <select
               value={outputFormat}
               onChange={(e) => setOutputFormat(e.target.value as OutputFormat)}
-              className="mt-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              className="mt-1 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
             >
-              <option value="pdf">PDF (.pdf)</option>
+              <option value="csv">CSV (.csv)</option>
               <option value="excel">Excel (.xlsx)</option>
+              <option value="pdf">PDF (.pdf)</option>
               <option value="text">Text (.txt)</option>
             </select>
           </label>
+
+          {outputFormat === "csv" && (
+            <label className="text-sm">
+            <span className="text-xs text-gray-500">CSV mode</span>
+            <select
+              value={outputMode}
+              onChange={(e) => setOutputMode(e.target.value as OutputMode)}
+              className="mt-1 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
+              >
+                <option value="new">New file (with headers)</option>
+                <option value="append">Append row (no headers)</option>
+              </select>
+            </label>
+          )}
 
           <button
             type="button"
@@ -435,23 +510,51 @@ export default function MappingPage() {
           <button
             type="button"
             onClick={saveCurrentMapping}
-            className="rounded-md border border-emerald-500 px-4 py-2 text-sm font-medium text-emerald-300"
+            className="rounded-md border border-emerald-500 px-4 py-2 text-sm font-medium text-emerald-600"
           >
             Save Mapping JSON
           </button>
         </div>
       </section>
 
+      {/* Extracted Fields Preview */}
+      {selectedFile && sourceOptions.length > 0 && (
+        <section className="card mt-4 p-4">
+          <h2 className="font-semibold text-gray-900">Extracted Fields ({sourceOptions.length})</h2>
+          <p className="mt-1 text-xs text-gray-500">All fields detected from the uploaded PDF. Use these as source fields in the mapping above.</p>
+          <div className="mt-3 max-h-80 overflow-auto rounded border border-gray-200">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">ID</th>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">Label</th>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">Value</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {sourceOptions.map((s) => (
+                  <tr key={s.key}>
+                    <td className="px-3 py-1.5 text-xs text-gray-400 font-mono">{s.key}</td>
+                    <td className="px-3 py-1.5 text-gray-700">{s.label}</td>
+                    <td className="px-3 py-1.5 text-gray-600 max-w-xs truncate" title={s.value}>{s.value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       <section className="card mt-4 p-4">
-        <h2 className="font-semibold text-white">Saved Mappings (mappings folder)</h2>
+        <h2 className="font-semibold text-gray-900">Saved Mappings</h2>
         {savedMappings.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-400">No saved mappings yet.</p>
+          <p className="mt-3 text-sm text-gray-500">No saved mappings yet.</p>
         ) : (
           <div className="mt-3 space-y-2">
             {savedMappings.slice(0, 12).map((m) => (
-              <div key={m.id} className="rounded border border-slate-800 px-3 py-2 text-sm text-slate-200">
+              <div key={m.id} className="rounded border border-gray-200 px-3 py-2 text-sm text-gray-700">
                 <div className="font-medium">{m.name}</div>
-                <div className="text-xs text-slate-400">
+                <div className="text-xs text-gray-500">
                   {m.fileNameOnDisk} • {m.fileName} • {m.outputFormat.toUpperCase()} • {new Date(m.createdAt).toLocaleString()}
                 </div>
               </div>
@@ -461,8 +564,8 @@ export default function MappingPage() {
       </section>
 
       <section className="card mt-4 p-4">
-        <h2 className="font-semibold text-white">Generated Output (Preview)</h2>
-        <pre className="mt-3 max-h-72 overflow-auto rounded bg-slate-950 p-3 text-xs text-slate-200">
+        <h2 className="font-semibold text-gray-900">Output Preview</h2>
+        <pre className="mt-3 max-h-72 overflow-auto rounded bg-gray-50 p-3 text-xs text-gray-700">
           {generatedJson || "Output preview appears here after generation."}
         </pre>
       </section>

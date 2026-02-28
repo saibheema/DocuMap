@@ -4,13 +4,15 @@ import { z } from "zod";
 import { getTenantJobs, getTenantUploads } from "../lib/tenant-store.js";
 import { extractFieldsFromPdfBuffer, extractFieldsFromPdfPath } from "../lib/pdf-extractor.js";
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024 } // 100 MB
+});
 
 const ingestByReferenceSchema = z.object({
   fileName: z
     .string()
-    .min(1)
-    .regex(/^Source1_.+/, "fileName must follow Source1_<filename> format"),
+    .min(1),
   sourcePath: z.string().min(3),
   outputPath: z.string().min(3).optional(),
   extractedFields: z
@@ -38,16 +40,20 @@ uploadRouter.post("/file", upload.single("file"), async (req, res) => {
     return res.status(400).json({ error: "file is required" });
   }
 
-  if (!/^Source1_.+/.test(file.originalname)) {
+  // Accept any PDF file name — no prefix requirement
+  if (!file.originalname.trim()) {
     return res
       .status(400)
-      .json({ error: "file name must follow Source1_<filename> format", fileName: file.originalname });
+      .json({ error: "file must have a name", fileName: file.originalname });
   }
 
-  let extractedFields = [];
+  let extractedFields: { id: string; label: string; value: string; confidence: number }[] = [];
   try {
+    console.log(`[upload] Processing ${file.originalname} (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
     extractedFields = await extractFieldsFromPdfBuffer(file.buffer);
+    console.log(`[upload] Extracted ${extractedFields.length} fields from ${file.originalname}`);
   } catch (error) {
+    console.error(`[upload] Extraction error for ${file.originalname}:`, error);
     return res.status(400).json({
       error: "Failed to extract fields from uploaded PDF",
       details: error instanceof Error ? error.message : "unknown"
@@ -82,6 +88,7 @@ uploadRouter.post("/file", upload.single("file"), async (req, res) => {
     sourcePath: `uploaded://${file.originalname}`,
     status: extractedFields.length > 0 ? "mapped" : "queued",
     extractedFieldCount: extractedFields.length,
+    fields: extractedFields,
     note:
       extractedFields.length > 0
         ? "fields extracted from uploaded PDF"

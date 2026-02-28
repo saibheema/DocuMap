@@ -14,6 +14,48 @@ const generateSchema = z.object({
   mappings: z.array(mappingSchema).min(1)
 });
 
+/**
+ * Merge values when the same target key is mapped more than once.
+ * Numbers → sum; text → append with " + ".
+ */
+function mergeValue(existing: string | undefined, incoming: string): string {
+  if (existing === undefined) return incoming;
+  const numA = parseNumber(existing);
+  const numB = parseNumber(incoming);
+  if (numA !== null && numB !== null) {
+    return formatNumber(numA + numB, existing);
+  }
+  return `${existing} + ${incoming}`;
+}
+
+/** Parse a numeric string, stripping currency symbols, commas, and parens. */
+function parseNumber(s: string): number | null {
+  const cleaned = s.replace(/[₹$€£¥%\s]/g, "").replace(/^\((.+)\)$/, "-$1").replace(/,/g, "");
+  if (!cleaned || !/^-?\d+(\.\d+)?$/.test(cleaned)) return null;
+  return Number(cleaned);
+}
+
+/** Format summed number, preserving comma style from the original value. */
+function formatNumber(n: number, reference: string): string {
+  // Detect Indian-style formatting (e.g. 12,34,567.89)
+  const isIndian = /\d{1,2},\d{2},\d{3}/.test(reference);
+  const abs = Math.abs(n);
+  let formatted: string;
+  if (isIndian) {
+    const [intPart, decPart] = abs.toString().split(".");
+    const lastThree = intPart.slice(-3);
+    const rest = intPart.slice(0, -3);
+    const grouped = rest ? rest.replace(/\B(?=(\d{2})+(?!\d))/g, ",") + "," + lastThree : lastThree;
+    formatted = decPart ? `${grouped}.${decPart}` : grouped;
+  } else {
+    formatted = abs.toLocaleString("en-US", { maximumFractionDigits: 10 });
+  }
+  // Restore currency prefix if present
+  const currMatch = reference.match(/^[₹$€£¥]/);
+  const prefix = currMatch ? currMatch[0] : "";
+  return n < 0 ? `${prefix}-${formatted}` : `${prefix}${formatted}`;
+}
+
 export const generateRouter = Router();
 
 generateRouter.post("/", (req, res) => {
@@ -44,9 +86,9 @@ generateRouter.post("/", (req, res) => {
     }
 
     if (row.targetType === "field") {
-      outputFields[row.targetKey] = value;
+      outputFields[row.targetKey] = mergeValue(outputFields[row.targetKey], value);
     } else {
-      outputTables[row.targetKey] = value;
+      outputTables[row.targetKey] = mergeValue(outputTables[row.targetKey], value);
     }
   }
 
@@ -61,7 +103,7 @@ generateRouter.post("/", (req, res) => {
     sourceFileName: sourceFile.fileName,
     generatedAt: new Date().toISOString(),
     output: {
-      fields: outputFields,
+      fields: { "Source File": sourceFile.fileName, ...outputFields },
       tables: outputTables
     },
     unmappedSourceFields,

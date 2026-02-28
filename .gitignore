@@ -7,3 +7,22 @@ coverage
 .env.local
 apps/web/.next
 apps/api/dist
+
+# Firebase build artifacts
+.firebase/
+
+# Playwright MCP logs
+.playwright-mcp/
+
+# Mapping data (tenant-specific)
+mappings/
+mapping-memory/
+
+# Test files with potential secrets
+test-gemini-api.html
+
+# Docker
+*.tar
+
+# OS files
+Thumbs.db

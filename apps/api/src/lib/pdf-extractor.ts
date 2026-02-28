@@ -27,7 +27,8 @@ function normalizeSourcePath(sourcePath: string) {
 }
 
 function looksLikeAmount(value: string) {
-  return /\(?-?\d[\d,]*(?:\.\d+)?\)?/.test(value);
+  // Handles standard (1,234,567.89) and Indian (12,34,567.89) number formats
+  return /\(?-?[₹$€£¥]?\s?\d[\d,]*(?:\.\d+)?\s?%?\)?/.test(value);
 }
 
 function sanitizeLabel(label: string) {
@@ -36,6 +37,21 @@ function sanitizeLabel(label: string) {
 
 function sanitizeValue(value: string) {
   return value.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Detects when extracted text is just a watermark/scanner branding
+ * repeated on every page (e.g. "AnyScanner\nAnyScanner\n...").
+ */
+function isWatermarkOnly(text: string): boolean {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (lines.length === 0) return true;
+  const unique = new Set(lines.map(l => l.toLowerCase()));
+  if (unique.size <= 3 && lines.length >= 3) {
+    const avgUniqueLen = [...unique].reduce((s, l) => s + l.length, 0) / unique.size;
+    if (avgUniqueLen < 40) return true;
+  }
+  return false;
 }
 
 async function isCommandAvailable(command: string): Promise<boolean> {
@@ -61,13 +77,13 @@ async function extractTextWithOcr(pdfPath: string): Promise<string> {
       "-f",
       "1",
       "-l",
-      "3",
+      "10",
       "-png",
       "-r",
-      "220",
+      "150",
       pdfPath,
       outputPrefix
-    ]);
+    ], { maxBuffer: 50 * 1024 * 1024 });
 
     const files = await fs.readdir(tmpDir);
     const pageImages = files
@@ -77,7 +93,7 @@ async function extractTextWithOcr(pdfPath: string): Promise<string> {
     let text = "";
     for (const imageName of pageImages) {
       const imagePath = path.join(tmpDir, imageName);
-      const { stdout } = await execFile("tesseract", [imagePath, "stdout", "-l", "eng", "--psm", "6"]);
+      const { stdout } = await execFile("tesseract", [imagePath, "stdout", "-l", "eng", "--psm", "6"], { maxBuffer: 10 * 1024 * 1024 });
       if (stdout) {
         text += `\n${stdout}`;
       }
@@ -93,18 +109,18 @@ async function extractTextWithOcr(pdfPath: string): Promise<string> {
 
 function isLikelyLabel(line: string) {
   const t = line.trim();
-  if (!t || t.length < 2 || t.length > 90) {
+  if (!t || t.length < 2 || t.length > 150) {
     return false;
   }
   if (/^[\d\W]+$/.test(t)) {
     return false;
   }
-  return /^[A-Za-z][A-Za-z0-9_\s\-/().&:#]*$/.test(t);
+  return /^[A-Za-z][A-Za-z0-9_\s\-/().&:#'",% ]*$/.test(t);
 }
 
 function isLikelyValue(line: string) {
   const t = line.trim();
-  if (!t || t.length < 1 || t.length > 140) {
+  if (!t || t.length < 1 || t.length > 300) {
     return false;
   }
 
@@ -112,7 +128,7 @@ function isLikelyValue(line: string) {
     return true;
   }
 
-  if (/^[A-Za-z0-9][A-Za-z0-9_\-/().,:#\s]{1,140}$/.test(t)) {
+  if (/^[A-Za-z0-9₹$€£¥][A-Za-z0-9_\-/().,:#'"\s]{1,300}$/.test(t)) {
     return true;
   }
 
@@ -125,7 +141,7 @@ function extractFromLine(line: string): { label: string; value: string; confiden
     return null;
   }
 
-  const colonMatch = trimmed.match(/^([A-Za-z][A-Za-z0-9_\s\-/().&]{1,80})\s*:\s*(.+)$/);
+  const colonMatch = trimmed.match(/^([A-Za-z][A-Za-z0-9_\s\-/().&'",% #@]{1,120})\s*:\s*(.+)$/);
   if (colonMatch) {
     return {
       label: sanitizeLabel(colonMatch[1]),
@@ -135,7 +151,7 @@ function extractFromLine(line: string): { label: string; value: string; confiden
   }
 
   const trailingNumberMatch = trimmed.match(
-    /^([A-Za-z][A-Za-z0-9_\s\-/().&]{2,80})\s+([₹$€£]?\(?-?\d[\d,]*(?:\.\d+)?\)?%?)$/
+    /^([A-Za-z][A-Za-z0-9_\s\-/().&'",% #@]{2,120})\s+([₹$€£¥]?\s?\(?-?\d[\d,]*(?:\.\d+)?\)?\s?%?)$/
   );
   if (trailingNumberMatch && looksLikeAmount(trailingNumberMatch[2])) {
     return {
@@ -145,11 +161,23 @@ function extractFromLine(line: string): { label: string; value: string; confiden
     };
   }
 
-  const wideGapMatch = trimmed.match(/^([A-Za-z][A-Za-z0-9_\s\-/().&]{1,80}?)\s{2,}(.+)$/);
+  const wideGapMatch = trimmed.match(/^([A-Za-z][A-Za-z0-9_\s\-/().&'",% #@]{1,120}?)\s{2,}(.+)$/);
   if (wideGapMatch && isLikelyValue(wideGapMatch[2])) {
     return {
       label: sanitizeLabel(wideGapMatch[1]),
       value: sanitizeValue(wideGapMatch[2]),
+      confidence: 0.78
+    };
+  }
+
+  // "Key = Value" or "Key | Value" (alternate separators)
+  const altSepMatch = trimmed.match(
+    /^([A-Za-z][A-Za-z0-9_\s\-/().&'",% #@]{1,120})\s*[=|]\s*(.+)$/
+  );
+  if (altSepMatch) {
+    return {
+      label: sanitizeLabel(altSepMatch[1]),
+      value: sanitizeValue(altSepMatch[2]),
       confidence: 0.78
     };
   }
@@ -215,7 +243,7 @@ function extractFieldsFromText(text: string): ExtractedField[] {
   }
 
   if (extracted.length === 0 && lines.length > 0) {
-    const fallbackLines = lines.filter((line) => line.length >= 4).slice(0, 20);
+    const fallbackLines = lines.filter((line) => line.length >= 4).slice(0, 60);
     for (const line of fallbackLines) {
       const value = sanitizeValue(line);
       const dedupeKey = `line::${value.toLowerCase()}`;
@@ -237,18 +265,53 @@ function extractFieldsFromText(text: string): ExtractedField[] {
 
 export async function extractFieldsFromPdfBuffer(buffer: Buffer): Promise<ExtractedField[]> {
   const parsed = await pdf(buffer);
-  let fields = extractFieldsFromText(parsed.text);
-  if (fields.length > 0) {
-    return fields;
+  const rawText = parsed.text.trim();
+  const scanned = !rawText || rawText.length < 20 || isWatermarkOnly(rawText);
+
+  // If text-based PDF with real content, try text extraction first
+  if (!scanned) {
+    const fields = extractFieldsFromText(parsed.text);
+    if (fields.length > 0) {
+      return fields;
+    }
   }
 
+  // Try OCR for scanned docs or when text extraction found nothing
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "documap-upload-"));
   const tmpPdf = path.join(tmpDir, "upload.pdf");
   try {
     await fs.writeFile(tmpPdf, buffer);
     const ocrText = await extractTextWithOcr(tmpPdf);
-    fields = extractFieldsFromText(ocrText);
-    return fields;
+    if (ocrText.trim()) {
+      const fields = extractFieldsFromText(ocrText);
+      if (fields.length > 0) {
+        return fields;
+      }
+
+      // Even if no structured fields, return raw OCR lines
+      const ocrLines = ocrText.split(/\r?\n/).filter(l => l.trim().length > 2);
+      if (ocrLines.length > 0) {
+        return ocrLines.slice(0, 100).map((line, idx) => ({
+          id: `ef_${idx + 1}`,
+          label: `Content ${idx + 1}`,
+          value: sanitizeValue(line).slice(0, 500),
+          confidence: 0.3
+        }));
+      }
+    }
+
+    // Last resort: return raw text lines from parsed PDF (only if not watermark-only)
+    if (!scanned && rawText.length > 10) {
+      const lines = rawText.split(/\r?\n/).filter(l => l.trim().length > 2);
+      return lines.slice(0, 100).map((line, idx) => ({
+        id: `ef_${idx + 1}`,
+        label: `Content ${idx + 1}`,
+        value: sanitizeValue(line).slice(0, 500),
+        confidence: 0.2
+      }));
+    }
+
+    return [];
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
@@ -263,12 +326,45 @@ export async function extractFieldsFromPdfPath(sourcePath: string): Promise<Extr
 
   const buffer = await fs.readFile(resolvedPath);
   const parsed = await pdf(buffer);
-  let fields = extractFieldsFromText(parsed.text);
-  if (fields.length > 0) {
-    return fields;
+  const rawText = parsed.text.trim();
+  const scanned = !rawText || rawText.length < 20 || isWatermarkOnly(rawText);
+
+  if (!scanned) {
+    const fields = extractFieldsFromText(parsed.text);
+    if (fields.length > 0) {
+      return fields;
+    }
   }
 
+  // Try OCR for scanned docs or when text extraction found nothing
   const ocrText = await extractTextWithOcr(resolvedPath);
-  fields = extractFieldsFromText(ocrText);
-  return fields;
+  if (ocrText.trim()) {
+    const fields = extractFieldsFromText(ocrText);
+    if (fields.length > 0) {
+      return fields;
+    }
+
+    const ocrLines = ocrText.split(/\r?\n/).filter(l => l.trim().length > 2);
+    if (ocrLines.length > 0) {
+      return ocrLines.slice(0, 100).map((line, idx) => ({
+        id: `ef_${idx + 1}`,
+        label: `Content ${idx + 1}`,
+        value: sanitizeValue(line).slice(0, 500),
+        confidence: 0.3
+      }));
+    }
+  }
+
+  // Last resort: return raw text lines from parsed PDF (only if not watermark-only)
+  if (!scanned && rawText.length > 10) {
+    const lines = rawText.split(/\r?\n/).filter(l => l.trim().length > 2);
+    return lines.slice(0, 100).map((line, idx) => ({
+      id: `ef_${idx + 1}`,
+      label: `Content ${idx + 1}`,
+      value: sanitizeValue(line).slice(0, 500),
+      confidence: 0.2
+    }));
+  }
+
+  return [];
 }

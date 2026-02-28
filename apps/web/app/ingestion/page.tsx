@@ -6,22 +6,30 @@ import {
   createUploadReference,
   getTenantId,
   listUploads,
-  processUploadReference,
   uploadSourcePdf,
   type UploadReference
 } from "../../lib/api";
 import { extractFieldsFromPdfInBrowser } from "../../lib/pdf-client-extractor";
+import { getGeminiApiKey, setGeminiApiKey } from "../../lib/ai-extractor";
 
 export default function IngestionPage() {
   const [items, setItems] = useState<UploadReference[]>([]);
-  const [fileName, setFileName] = useState("");
-  const [sourcePath, setSourcePath] = useState("");
-  const [outputPath, setOutputPath] = useState("");
   const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
-  const [extractedFieldsJson, setExtractedFieldsJson] = useState("[]");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [progressMsg, setProgressMsg] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+
+  const isHostedWithoutApi =
+    typeof window !== "undefined" &&
+    !["localhost", "127.0.0.1"].includes(window.location.hostname) &&
+    !process.env.NEXT_PUBLIC_API_URL;
+
+  useEffect(() => {
+    setApiKey(getGeminiApiKey());
+  }, []);
 
   const load = async () => {
     try {
@@ -29,7 +37,7 @@ export default function IngestionPage() {
       setItems(response.items);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load upload references");
+      setError(e instanceof Error ? e.message : "Failed to load uploads");
     }
   };
 
@@ -37,214 +45,217 @@ export default function IngestionPage() {
     load();
   }, []);
 
-  const addRef = async () => {
-    if (!fileName.trim() || (!sourcePath.trim() && !selectedPdf)) {
-      return;
-    }
-    if (!/^Source1_.+/.test(fileName)) {
-      setError("fileName must follow Source1_<filename> format.");
+  const handleUpload = async () => {
+    if (!selectedPdf) {
+      setError("Please select a PDF file to upload.");
       return;
     }
 
-    let extractedFields: Array<{ label: string; value: string; confidence?: number }> = [];
-    try {
-      const parsed = JSON.parse(extractedFieldsJson) as unknown;
-      if (Array.isArray(parsed)) {
-        extractedFields = parsed
-          .filter((x): x is { label: string; value: string; confidence?: number } => {
-            return (
-              typeof x === "object" &&
-              x !== null &&
-              "label" in x &&
-              "value" in x &&
-              typeof (x as { label: unknown }).label === "string" &&
-              typeof (x as { value: unknown }).value === "string"
-            );
-          })
-          .map((x) => ({
-            label: x.label,
-            value: x.value,
-            confidence: typeof x.confidence === "number" ? x.confidence : undefined
-          }));
-      }
-    } catch {
-      setError("Extracted fields JSON must be a valid array.");
-      return;
-    }
+    const fileName = selectedPdf.name;
+    setError(null);
+    setInfo(null);
 
     try {
-      if (selectedPdf) {
-        setIsExtracting(true);
-        try {
-          const extractionResult = await extractFieldsFromPdfInBrowser(selectedPdf);
-          const browserExtracted = extractionResult.fields.map((f, index) => ({
-            id: f.id || `ef_${index + 1}`,
-            label: f.label,
-            value: f.value,
-            confidence: f.confidence
-          }));
+      setIsExtracting(true);
+      setProgressMsg("Starting extraction...");
+      try {
+        const extractionResult = await extractFieldsFromPdfInBrowser(selectedPdf, (msg) =>
+          setProgressMsg(msg)
+        );
+        const browserExtracted = extractionResult.fields.map((f, index) => ({
+          id: f.id || `ef_${index + 1}`,
+          label: f.label,
+          value: f.value,
+          confidence: f.confidence
+        }));
+
+        if (browserExtracted.length > 0 || isHostedWithoutApi) {
+          setProgressMsg("Saving extracted fields...");
+          await createUploadReference({
+            fileName,
+            sourcePath: `browser-upload://${fileName}`,
+            extractedFields: browserExtracted
+          });
 
           if (browserExtracted.length > 0) {
-            await createUploadReference({
-              fileName,
-              sourcePath: sourcePath || `browser-upload://${selectedPdf.name}`,
-              outputPath: outputPath || undefined,
-              extractedFields: browserExtracted
-            });
-
+            const methodLabel =
+              extractionResult.method === "ai"
+                ? "Gemini AI"
+                : extractionResult.method === "ocr"
+                ? "Tesseract.js OCR"
+                : "PDF text";
             setInfo(
-              `Extracted ${browserExtracted.length} fields in browser using ${
-                extractionResult.method === "ocr" ? "OCR" : "PDF text"
-              }.`
+              `✅ Extracted ${browserExtracted.length} fields using ${methodLabel}.`
             );
           } else {
-            const uploaded = await uploadSourcePdf(selectedPdf, outputPath || undefined);
-            setInfo(
-              uploaded.extractedFieldCount > 0
-                ? `Extracted ${uploaded.extractedFieldCount} fields using server upload processing.`
-                : "No fields detected automatically. Add fields manually in JSON or use OCR-enabled backend."
-            );
+            setInfo("⚠️ Document saved but no fields were extracted. This PDF may be image-only, encrypted, or have unusual formatting. Try configuring a Gemini API key for AI-powered OCR extraction.");
           }
-        } catch {
-          const uploaded = await uploadSourcePdf(selectedPdf, outputPath || undefined);
+        } else {
+          const uploaded = await uploadSourcePdf(selectedPdf);
           setInfo(
             uploaded.extractedFieldCount > 0
-              ? `Extracted ${uploaded.extractedFieldCount} fields using server upload processing.`
-              : "Browser extraction failed. Uploaded file to server, but no fields detected."
+              ? `✅ Extracted ${uploaded.extractedFieldCount} fields via server processing.`
+              : "Document uploaded. No fields detected — try configuring a Gemini API key for better results."
           );
         }
-      } else {
-        await createUploadReference({
-          fileName,
-          sourcePath,
-          outputPath: outputPath || undefined,
-          extractedFields
-        });
+      } catch {
+        const uploaded = await uploadSourcePdf(selectedPdf);
+        setInfo(
+          uploaded.extractedFieldCount > 0
+            ? `✅ Extracted ${uploaded.extractedFieldCount} fields via server processing.`
+            : "Document saved but no fields were detected. Configure a Gemini API key for AI-powered extraction."
+        );
       }
-      setFileName("");
-      setSourcePath("");
-      setOutputPath("");
       setSelectedPdf(null);
-      setExtractedFieldsJson("[]");
+      // Reset the file input
+      const fileInput = document.getElementById("pdf-file-input") as HTMLInputElement;
+      if (fileInput) fileInput.value = "";
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create upload reference");
+      setError(e instanceof Error ? e.message : "Failed to upload document");
       setInfo(null);
     } finally {
       setIsExtracting(false);
+      setProgressMsg(null);
     }
   };
 
   return (
     <SaaSShell
-      title="Reference Ingestion"
-      subtitle="Register source file references from client folders without uploading binary documents."
+      title="Upload Documents"
+      subtitle="Upload PDF documents for AI-powered field extraction."
       workspaceLabel={getTenantId()}
     >
-      {error ? <div className="card mb-4 p-3 text-sm text-rose-300">{error}</div> : null}
-      {info ? <div className="card mb-4 p-3 text-sm text-emerald-300">{info}</div> : null}
+      {error ? <div className="card mb-4 p-3 text-sm text-rose-600">{error}</div> : null}
+      {info ? <div className="card mb-4 p-3 text-sm text-emerald-600">{info}</div> : null}
+      {progressMsg && isExtracting ? (
+        <div className="card mb-4 p-3 text-sm text-sky-600">
+          <div className="flex items-center gap-2">
+            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            {progressMsg}
+          </div>
+        </div>
+      ) : null}
 
-      <section className="card p-5">
-        <p className="mb-3 text-sm text-amber-300">
-          Source file naming rule: <strong>Source1_&lt;filename&gt;</strong>
-        </p>
-        <h2 className="font-semibold text-white">Create Ingestion Reference</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <label className="md:col-span-2">
-            <span className="text-xs text-slate-400">Or choose local file to auto-fill file name</span>
+      {/* AI Configuration */}
+      <section className="card mb-4 p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-900">🤖 Gemini AI OCR</span>
+            {apiKey ? (
+              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-600">
+                Active — best for scanned PDFs
+              </span>
+            ) : (
+              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-600">
+                Not configured — using fallback OCR
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowApiKeyInput(!showApiKeyInput)}
+            className="text-xs text-blue-400 hover:text-blue-300"
+          >
+            {showApiKeyInput ? "Hide" : apiKey ? "Change Key" : "Configure"}
+          </button>
+        </div>
+        {showApiKeyInput && (
+          <div className="mt-3 flex gap-2">
             <input
-              type="file"
-              accept="application/pdf"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) {
-                  setFileName(f.name);
-                  setSelectedPdf(f);
-                  setSourcePath(`browser-upload://${f.name}`);
-                }
-              }}
-              className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="Paste your Google Gemini API key"
+              className="flex-1 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
             />
-          </label>
+            <button
+              type="button"
+              onClick={() => {
+                setGeminiApiKey(apiKey);
+                setShowApiKeyInput(false);
+                setInfo(apiKey ? "✅ Gemini AI configured. OCR extraction active for all uploads." : "API key cleared.");
+              }}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white"
+            >
+              Save
+            </button>
+          </div>
+        )}
+        {!apiKey && !showApiKeyInput && (
+          <p className="mt-2 text-xs text-gray-400">
+            Get a free API key from{" "}
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">
+              Google AI Studio
+            </a>{" "}
+            for high-quality OCR extraction from scanned or image-based PDFs using Gemini AI.
+          </p>
+        )}
+      </section>
+
+      {/* Upload Form */}
+      <section className="card p-5">
+        <h2 className="font-semibold text-gray-900">Select PDF Document</h2>
+        <p className="mt-1 text-sm text-gray-500">
+          Choose a PDF file to upload. Fields will be extracted automatically{apiKey ? " using Gemini AI" : ""}.
+        </p>
+        <div className="mt-4">
           <input
-            value={fileName}
-            onChange={(e) => setFileName(e.target.value)}
-            placeholder="File name (Source1_<filename>)"
-            className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-          />
-          <input
-            value={sourcePath}
-            onChange={(e) => setSourcePath(e.target.value)}
-            placeholder="Source path (client network)"
-            className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-          />
-          <input
-            value={outputPath}
-            onChange={(e) => setOutputPath(e.target.value)}
-            placeholder="Output path (optional)"
-            className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 md:col-span-2"
-          />
-          <textarea
-            value={extractedFieldsJson}
-            onChange={(e) => setExtractedFieldsJson(e.target.value)}
-            placeholder='Extracted fields JSON array, e.g. [{"label":"Owners Capital","value":"125000"}]'
-            className="min-h-28 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 md:col-span-2"
+            id="pdf-file-input"
+            type="file"
+            accept="application/pdf"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) setSelectedPdf(f);
+            }}
+            className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
           />
         </div>
+        {selectedPdf && (
+          <p className="mt-2 text-sm text-gray-600">
+            Selected: <strong className="text-gray-900">{selectedPdf.name}</strong> ({(selectedPdf.size / 1024).toFixed(1)} KB)
+          </p>
+        )}
         <button
           type="button"
-          onClick={addRef}
-          disabled={isExtracting}
-          className="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white"
+          onClick={handleUpload}
+          disabled={isExtracting || !selectedPdf}
+          className="mt-4 rounded-md bg-blue-600 px-5 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          {isExtracting ? "Extracting..." : "Add Reference"}
+          {isExtracting ? "Extracting..." : "Upload & Extract"}
         </button>
       </section>
 
-      <section className="card mt-6 overflow-hidden">
-        <div className="grid grid-cols-5 border-b border-slate-800 px-5 py-3 text-xs uppercase tracking-wide text-slate-400">
-          <span>File</span>
-          <span>Source Path</span>
-          <span>Output Path</span>
-          <span>Status</span>
-          <span>Action</span>
-        </div>
-        <div className="divide-y divide-slate-800">
-          {items.map((item) => (
-            <div key={item.fileId} className="grid grid-cols-5 gap-3 px-5 py-4 text-sm">
-              <span className="text-slate-100">{item.fileName}</span>
-              <span className="truncate text-slate-300" title={item.sourcePath}>
-                {item.sourcePath}
-              </span>
-              <span className="truncate text-slate-300" title={item.outputPath || "Not set"}>
-                {item.outputPath || "Not set"}
-              </span>
-              <span className="text-blue-300">{item.status}</span>
-              <div>
-                {item.status === "queued" ? (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        await processUploadReference(item.fileId);
-                        await load();
-                        setError(null);
-                      } catch (e) {
-                        setError(e instanceof Error ? e.message : "Failed to process upload reference");
-                      }
-                    }}
-                    className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-100"
-                  >
-                    Process
-                  </button>
-                ) : (
-                  <span className="text-xs text-slate-500">-</span>
-                )}
+      {/* Upload History */}
+      {items.length > 0 && (
+        <section className="card mt-6 overflow-hidden">
+          <div className="border-b border-gray-200 px-5 py-3">
+            <h2 className="text-sm font-medium text-gray-900">Uploaded Documents</h2>
+          </div>
+          <div className="divide-y divide-gray-200">
+            {items.map((item) => (
+              <div key={item.fileId} className="flex items-center justify-between px-5 py-4 text-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-gray-900">{item.fileName}</p>
+                  <p className="text-xs text-gray-400">
+                    {item.extractedFields.length} fields extracted • {new Date(item.createdAt).toLocaleString()}
+                  </p>
+                </div>
+                <span className={`ml-4 rounded-full px-2 py-0.5 text-xs ${
+                  item.status === "mapped" ? "bg-emerald-50 text-emerald-600" :
+                  item.status === "exported" ? "bg-blue-50 text-blue-600" :
+                  "bg-gray-100 text-gray-500"
+                }`}>
+                  {item.status}
+                </span>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      )}
     </SaaSShell>
   );
 }
