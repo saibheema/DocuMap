@@ -200,6 +200,76 @@ export async function learnMappings(
 }
 
 /**
+ * Directly add a source label variant to a target. Creates entry if needed.
+ * Used by the visual mapping canvas when a user types in a new source label.
+ */
+export async function addSourceLabel(
+  tenantId: string,
+  targetKey: string,
+  targetType: "field" | "table",
+  sourceLabel: string
+): Promise<MappingMemoryStore> {
+  const store = await loadMappingMemory(tenantId);
+  const normalizedLabel = sourceLabel.toLowerCase().trim();
+  if (!normalizedLabel) return store;
+
+  let entry = store.entries.find((e) => e.targetKey === targetKey);
+  if (entry) {
+    if (!entry.sourceLabels.includes(normalizedLabel)) {
+      entry.sourceLabels.push(normalizedLabel);
+    }
+    entry.usageCount += 1;
+    entry.lastUsed = new Date().toISOString();
+  } else {
+    store.entries.push({
+      targetKey,
+      targetType,
+      sourceLabels: [normalizedLabel],
+      usageCount: 1,
+      lastUsed: new Date().toISOString()
+    });
+  }
+
+  await persistMappingMemory(store);
+  return store;
+}
+
+/**
+ * Remove a specific source label from a target entry.
+ */
+export async function removeSourceLabel(
+  tenantId: string,
+  targetKey: string,
+  sourceLabel: string
+): Promise<MappingMemoryStore> {
+  const store = await loadMappingMemory(tenantId);
+  const normalizedLabel = sourceLabel.toLowerCase().trim();
+  const entry = store.entries.find((e) => e.targetKey === targetKey);
+  if (entry) {
+    entry.sourceLabels = entry.sourceLabels.filter((l) => l !== normalizedLabel);
+    // Remove entry entirely if no labels left
+    if (entry.sourceLabels.length === 0) {
+      store.entries = store.entries.filter((e) => e.targetKey !== targetKey);
+    }
+  }
+  await persistMappingMemory(store);
+  return store;
+}
+
+/**
+ * Remove an entire target entry from memory.
+ */
+export async function removeTargetEntry(
+  tenantId: string,
+  targetKey: string
+): Promise<MappingMemoryStore> {
+  const store = await loadMappingMemory(tenantId);
+  store.entries = store.entries.filter((e) => e.targetKey !== targetKey);
+  await persistMappingMemory(store);
+  return store;
+}
+
+/**
  * Normalize a label for comparison: lowercase, trim, collapse whitespace.
  */
 function normalize(s: string): string {

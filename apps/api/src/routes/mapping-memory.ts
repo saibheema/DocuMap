@@ -3,7 +3,10 @@ import { z } from "zod";
 import {
   loadMappingMemory,
   learnMappings,
-  autoApplyFromMemory
+  autoApplyFromMemory,
+  addSourceLabel,
+  removeSourceLabel,
+  removeTargetEntry
 } from "../lib/mapping-memory-store.js";
 
 const learnSchema = z.object({
@@ -89,6 +92,65 @@ mappingMemoryRouter.post("/auto-apply", async (req, res) => {
   } catch (e) {
     return res.status(500).json({
       error: "Failed to auto-apply mappings",
+      details: e instanceof Error ? e.message : "unknown"
+    });
+  }
+});
+
+/** POST /mapping-memory/add-label — Add a single source label to a target */
+mappingMemoryRouter.post("/add-label", async (req, res) => {
+  const schema = z.object({
+    targetKey: z.string().min(1),
+    targetType: z.enum(["field", "table"]).default("field"),
+    sourceLabel: z.string().min(1)
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json(parsed.error.flatten());
+
+  try {
+    const store = await addSourceLabel(
+      req.tenantId,
+      parsed.data.targetKey,
+      parsed.data.targetType,
+      parsed.data.sourceLabel
+    );
+    return res.json(store);
+  } catch (e) {
+    return res.status(500).json({
+      error: "Failed to add label",
+      details: e instanceof Error ? e.message : "unknown"
+    });
+  }
+});
+
+/** POST /mapping-memory/remove-label — Remove a source label from a target */
+mappingMemoryRouter.post("/remove-label", async (req, res) => {
+  const schema = z.object({
+    targetKey: z.string().min(1),
+    sourceLabel: z.string().min(1)
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json(parsed.error.flatten());
+
+  try {
+    const store = await removeSourceLabel(req.tenantId, parsed.data.targetKey, parsed.data.sourceLabel);
+    return res.json(store);
+  } catch (e) {
+    return res.status(500).json({
+      error: "Failed to remove label",
+      details: e instanceof Error ? e.message : "unknown"
+    });
+  }
+});
+
+/** DELETE /mapping-memory/:targetKey — Remove an entire target entry */
+mappingMemoryRouter.delete("/:targetKey", async (req, res) => {
+  try {
+    const store = await removeTargetEntry(req.tenantId, req.params.targetKey);
+    return res.json(store);
+  } catch (e) {
+    return res.status(500).json({
+      error: "Failed to remove target",
       details: e instanceof Error ? e.message : "unknown"
     });
   }
