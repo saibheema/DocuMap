@@ -26,8 +26,10 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Seed from auth.currentUser so there is no null-flash when the page reloads
+  // and Firebase has already restored the session synchronously.
+  const [user, setUser] = useState<User | null>(() => auth?.currentUser ?? null);
+  const [loading, setLoading] = useState(() => !auth?.currentUser);
 
   useEffect(() => {
     if (!auth) { setLoading(false); return; }
