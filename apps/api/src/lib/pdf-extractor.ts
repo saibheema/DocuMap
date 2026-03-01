@@ -4,6 +4,8 @@ import os from "node:os";
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import pdf from "pdf-parse";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { OUTPUT_FIELDS, SYNONYM_MAP, type OutputFieldKey } from "@documap/shared";
 
 const execFile = promisify(execFileCb);
 
@@ -367,4 +369,166 @@ export async function extractFieldsFromPdfPath(sourcePath: string): Promise<Extr
   }
 
   return [];
+}
+
+// ─── Finance-domain extraction (Gemini AI + synonym map) ─────────────────────
+
+export type FinancialExtractionResult = {
+  fields: Partial<Record<OutputFieldKey, number>>;
+  unmappedFields: { rawLabel: string; rawValue: string }[];
+  confidence: "high" | "medium" | "low";
+  note: string;
+};
+
+function buildGeminiPrompt(pdfText: string, financialYear: string): string {
+  const synonymLines = OUTPUT_FIELDS.map((f) => {
+    const synonyms = SYNONYM_MAP[f.key].join(" / ");
+    return `  - "${f.label}" (also known as: ${synonyms})`;
+  }).join("\n");
+
+  const fySection = financialYear
+    ? `The document may contain figures for multiple years. Extract values only for the financial year "${financialYear}". If the year appears in a column header, use that column.`
+    : `If the document has multiple years, extract the most recent year's figures.`;
+
+  return `You are an expert financial data extractor specialising in dealer/automotive franchise audited financials (Trial Balance, Profit & Loss, Balance Sheet, Trading Account).
+
+${fySection}
+
+Extract exactly these 10 financial figures from the document:
+${synonymLines}
+
+Rules:
+1. Match each field using the primary name OR any of its known aliases — all comparisons are case-insensitive.
+2. The document may use these section headings: Balance Sheet, Profit & Loss Account, P&L, Trading Account, Trial Balance, Income Statement. Search all sections.
+3. Strip commas from numbers. Convert bracket notation (1,23,456) to -123456. Remove ₹ / $ / £ symbols.
+4. Return ONLY valid JSON — no markdown fences, no explanation, just the raw JSON object.
+5. Omit a key from "mapped" if you cannot find a reliable value for it.
+6. Place numeric values you found but could not match to the 10 fields in "unmapped".
+
+Return format (strict JSON):
+{
+  "mapped": {
+    "owners_capital": 1234567,
+    "total_liabilities": 9876543,
+    "pbit": 345678,
+    "interest": 12000,
+    "accounts_payable": 500000,
+    "purchases": 8000000,
+    "accounts_receivable": 600000,
+    "dealer_turnover": 10000000,
+    "current_assets": 2000000,
+    "current_liabilities": 1500000
+  },
+  "unmapped": [
+    { "label": "Advance from Customers", "value": 45000 }
+  ]
+}
+
+DOCUMENT TEXT:
+---
+${pdfText.slice(0, 28000)}
+---`;
+}
+
+function synonymMatch(rawText: string): Partial<Record<OutputFieldKey, number>> {
+  const result: Partial<Record<OutputFieldKey, number>> = {};
+  const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
+  const lineEntries: { text: string; num: number }[] = [];
+  for (const line of lines) {
+    const numMatch = line.match(/[₹$€£¥]?\s*\(?-?\d[\d,]*(?:\.\d+)?\)?/);
+    if (numMatch) {
+      const raw = numMatch[0].replace(/[₹$€£¥,\s]/g, "").replace(/\((.+)\)/, "-$1");
+      const n = parseFloat(raw);
+      if (isFinite(n)) lineEntries.push({ text: line.toLowerCase(), num: n });
+    }
+  }
+
+  for (const field of OUTPUT_FIELDS) {
+    const synonyms = SYNONYM_MAP[field.key].map((s) => s.toLowerCase());
+    for (const entry of lineEntries) {
+      if (synonyms.some((syn) => entry.text.includes(syn))) {
+        result[field.key] = entry.num;
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+export async function extractFinancialFields(
+  buffer: Buffer,
+  financialYear: string
+): Promise<FinancialExtractionResult> {
+  // 1. Get raw text from PDF
+  let rawText = "";
+  try {
+    const parsed = await pdf(buffer);
+    rawText = parsed.text?.trim() ?? "";
+  } catch {
+    rawText = "";
+  }
+
+  // 2. OCR fallback for scanned PDFs
+  if (!rawText || rawText.length < 50) {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "dm-fin-"));
+    const tmpPdf = path.join(tmpDir, "doc.pdf");
+    try {
+      await fs.writeFile(tmpPdf, buffer);
+      rawText = await extractTextWithOcr(tmpPdf);
+    } catch {
+      rawText = "";
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  }
+
+  if (!rawText || rawText.length < 20) {
+    return {
+      fields: {},
+      unmappedFields: [],
+      confidence: "low",
+      note: "Could not extract any readable text from the PDF.",
+    };
+  }
+
+  // 3. Try Gemini AI extraction
+  const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_AI_API_KEY ?? "";
+  if (apiKey) {
+    try {
+      const { GoogleGenerativeAI } = await import("@google/generative-ai");
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+      const prompt = buildGeminiPrompt(rawText, financialYear);
+      const response = await model.generateContent(prompt);
+      const text = response.response.text().trim();
+      const jsonText = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+      const geminiResult = JSON.parse(jsonText);
+      const mapped = (geminiResult.mapped ?? {}) as Partial<Record<OutputFieldKey, number>>;
+      const unmappedRaw = (geminiResult.unmapped ?? []) as { label: string; value: number }[];
+      const mappedCount = OUTPUT_FIELDS.filter((f) => mapped[f.key] != null).length;
+      const confidence: FinancialExtractionResult["confidence"] =
+        mappedCount >= 8 ? "high" : mappedCount >= 5 ? "medium" : "low";
+      return {
+        fields: mapped,
+        unmappedFields: unmappedRaw.map((u) => ({ rawLabel: u.label, rawValue: String(u.value) })),
+        confidence,
+        note: `Gemini AI extracted ${mappedCount}/10 fields.`,
+      };
+    } catch (err) {
+      console.warn("[pdf-extractor] Gemini extraction failed, falling back to synonym match:", err);
+    }
+  }
+
+  // 4. Synonym-map fallback
+  const synonymResult = synonymMatch(rawText);
+  const mappedCount = Object.keys(synonymResult).length;
+  return {
+    fields: synonymResult,
+    unmappedFields: [],
+    confidence: mappedCount >= 8 ? "medium" : "low",
+    note: apiKey
+      ? `Gemini unavailable; synonym matching found ${mappedCount}/10 fields.`
+      : `GEMINI_API_KEY not configured; synonym matching found ${mappedCount}/10 fields.`,
+  };
 }

@@ -1,15 +1,7 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
-import { uploadRouter } from "./routes/upload.js";
-import { templateRouter } from "./routes/templates.js";
-import { jobsRouter } from "./routes/jobs.js";
-import { sourceConnectionsRouter } from "./routes/source-connections.js";
-import { dashboardRouter } from "./routes/dashboard.js";
-import { generateRouter } from "./routes/generate.js";
-import { mappingsRouter } from "./routes/mappings.js";
-import { mappingMemoryRouter } from "./routes/mapping-memory.js";
-import { tenantMiddleware } from "./middleware/tenant.js";
+import { dealersRouter } from "./routes/dealers.js";
 
 dotenv.config();
 
@@ -24,39 +16,7 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "documap-api" });
 });
 
-app.use(tenantMiddleware);
-
-app.get("/whoami", (req, res) => {
-  res.json({ tenantId: req.tenantId });
-});
-
-app.use("/upload", uploadRouter);
-app.use("/source-connections", sourceConnectionsRouter);
-app.use("/templates", templateRouter);
-app.use("/mapping-jobs", jobsRouter);
-app.use("/dashboard", dashboardRouter);
-app.use("/generate", generateRouter);
-app.use("/mappings", mappingsRouter);
-app.use("/mapping-memory", mappingMemoryRouter);
-
-app.get("/data-policy", (req, res) => {
-  res.json({
-    tenantId: req.tenantId,
-    mode: "reference-only",
-    statement:
-      "Document content remains in client network folders. App stores only mapping metadata, file references, and processing status."
-  });
-});
-
-app.post("/preview", (req, res) => {
-  res.json({
-    tenantId: req.tenantId,
-    preview: req.body,
-    validation: {
-      missingRequired: []
-    }
-  });
-});
+app.use("/dealers", dealersRouter);
 
 const server = app.listen(port, () => {
   console.log(`API running on http://localhost:${port}`);

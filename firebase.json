@@ -2,5 +2,9 @@
   "hosting": {
     "site": "documap-cs-hc-8f0222acc86c43eca440f9a4",
     "source": "apps/web"
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
   }
 }
