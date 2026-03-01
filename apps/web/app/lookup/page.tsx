@@ -2,7 +2,6 @@
 
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useAuth } from "@/lib/auth-context";
@@ -11,7 +10,6 @@ import { FINANCIAL_YEAR_OPTIONS } from "@documap/shared";
 
 export default function LookupPage() {
   const { getIdToken } = useAuth();
-  const router = useRouter();
   const [dealerCode, setDealerCode] = useState("");
   const [financialYear, setFinancialYear] = useState(FINANCIAL_YEAR_OPTIONS[FINANCIAL_YEAR_OPTIONS.length - 2]);
   const [loading, setLoading] = useState(false);
@@ -27,9 +25,9 @@ export default function LookupPage() {
       const token = await getIdToken();
       const result = await lookupDealer(token, code, financialYear);
       if (result.found) {
-        router.push(`/review?dealer=${encodeURIComponent(code)}&fy=${encodeURIComponent(financialYear)}`);
+        window.location.href = `/review?dealer=${encodeURIComponent(code)}&fy=${encodeURIComponent(financialYear)}`;
       } else {
-        router.push(`/upload?dealer=${encodeURIComponent(code)}&fy=${encodeURIComponent(financialYear)}`);
+        window.location.href = `/upload?dealer=${encodeURIComponent(code)}&fy=${encodeURIComponent(financialYear)}`;
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Lookup failed. Please try again.");

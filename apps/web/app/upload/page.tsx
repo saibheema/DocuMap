@@ -48,6 +48,17 @@ function UploadContent() {
     setError("");
   }, []);
 
+  function handleReextract() {
+    setFile(null);
+    setStep("idle");
+    setFields({});
+    setUnmapped([]);
+    setConfidence(null);
+    setNote("");
+    setError("");
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   async function handleExtract() {
     if (!file) return;
     setError("");
@@ -177,6 +188,23 @@ function UploadContent() {
             </div>
           )}
         </div>
+
+        {/* Re-extract banner — visible once extraction is done */}
+        {(step === "review" || step === "saving") && (
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <div>
+              <p className="text-xs font-medium text-gray-700">Extracted from: <span className="font-mono text-gray-900">{file?.name}</span></p>
+              <p className="mt-0.5 text-xs text-gray-400">Need to use a different document?</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleReextract}
+              className="ml-4 shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              Change PDF &amp; Re-extract
+            </button>
+          </div>
+        )}
 
         {/* Step 2: Review fields */}
         {step === "review" || step === "saving" ? (
