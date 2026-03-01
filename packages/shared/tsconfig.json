@@ -4,8 +4,9 @@
     "outDir": "dist",
     "rootDir": "src",
     "declaration": true,
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext"
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "esModuleInterop": true,
   },
   "include": ["src/**/*.ts"]
 }

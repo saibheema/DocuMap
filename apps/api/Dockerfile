@@ -12,4 +12,4 @@ RUN npm run build -w @documap/shared
 RUN npm run build -w @documap/api
 
 EXPOSE 4000
-CMD ["npm", "run", "start", "-w", "@documap/api"]
+CMD ["node", "apps/api/dist/server.js"]
