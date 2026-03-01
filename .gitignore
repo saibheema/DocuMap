@@ -21,7 +21,10 @@ apps/**/.env.development
 # ─────────────────────────────────────────────────────────────
 
 apps/web/.next
+apps/web/out
 apps/api/dist
+packages/shared/src/*.js
+packages/shared/src/*.d.ts
 
 # Firebase build artifacts
 .firebase/
