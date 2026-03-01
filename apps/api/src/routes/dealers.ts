@@ -94,10 +94,10 @@ dealersRouter.post("/extract", requireAuth, upload.single("file"), async (req: a
     return res.status(400).json({ error: "Only PDF files are accepted" });
   }
 
-  const { financialYear } = req.body ?? {};
+  const { financialYear, geminiApiKey } = req.body ?? {};
 
   try {
-    const result = await extractFinancialFields(file.buffer, financialYear ?? "");
+    const result = await extractFinancialFields(file.buffer, financialYear ?? "", geminiApiKey);
     return res.json({
       fields: result.fields,
       unmappedFields: result.unmappedFields,

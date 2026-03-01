@@ -55,11 +55,13 @@ export async function lookupDealer(
 export async function extractFromPdf(
   token: string,
   file: File,
-  financialYear: string
+  financialYear: string,
+  geminiApiKey?: string
 ): Promise<ExtractionResult> {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("financialYear", financialYear);
+  if (geminiApiKey?.trim()) formData.append("geminiApiKey", geminiApiKey.trim());
   return apiFetch<ExtractionResult>("/dealers/extract", token, {
     method: "POST",
     body: formData,

@@ -29,6 +29,17 @@ function UploadContent() {
   const [dealerQuality, setDealerQuality] = useState<DealerQuality>("Good");
   const [seasonalProbability, setSeasonalProbability] = useState("");
   const [error, setError] = useState("");
+  const [geminiKey, setGeminiKey] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("documap:gemini-key") ?? "" : ""
+  );
+
+  function handleGeminiKeyChange(val: string) {
+    setGeminiKey(val);
+    if (typeof window !== "undefined") {
+      if (val.trim()) localStorage.setItem("documap:gemini-key", val.trim());
+      else localStorage.removeItem("documap:gemini-key");
+    }
+  }
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0] ?? null;
@@ -44,7 +55,7 @@ function UploadContent() {
     setStep("extracting");
     try {
       const token = await getIdToken();
-      const result = await extractFromPdf(token, file, financialYear);
+      const result = await extractFromPdf(token, file, financialYear, geminiKey);
       const strFields: FieldValues = {};
       for (const [k, v] of Object.entries(result.fields)) {
         strFields[k as OutputFieldKey] = String(v ?? "");
@@ -126,10 +137,35 @@ function UploadContent() {
             <input ref={fileRef} type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
           </div>
 
+          {/* Gemini API Key */}
+          <div className="mt-4">
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Gemini API Key
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 text-blue-500 underline"
+              >
+                Get a free key ↗
+              </a>
+            </label>
+            <input
+              type="password"
+              value={geminiKey}
+              onChange={(e) => handleGeminiKeyChange(e.target.value)}
+              placeholder="AIza…"
+              className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-mono outline-none focus:border-blue-500"
+            />
+            <p className="mt-0.5 text-xs text-gray-400">Saved to your browser only. Each user uses their own key.</p>
+          </div>
+
           {file && step === "idle" && (
             <button
               onClick={handleExtract}
-              className="mt-4 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+              disabled={!geminiKey.trim()}
+              title={!geminiKey.trim() ? "Enter your Gemini API key above to extract" : undefined}
+              className="mt-4 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Extract Fields with AI
             </button>

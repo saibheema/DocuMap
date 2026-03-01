@@ -458,7 +458,8 @@ function synonymMatch(rawText: string): Partial<Record<OutputFieldKey, number>> 
 
 export async function extractFinancialFields(
   buffer: Buffer,
-  financialYear: string
+  financialYear: string,
+  geminiApiKey?: string
 ): Promise<FinancialExtractionResult> {
   // 1. Get raw text from PDF
   let rawText = "";
@@ -493,7 +494,7 @@ export async function extractFinancialFields(
   }
 
   // 3. Try Gemini AI extraction
-  const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_AI_API_KEY ?? "";
+  const apiKey = geminiApiKey?.trim() || process.env.GEMINI_API_KEY ?? process.env.GOOGLE_AI_API_KEY ?? "";
   if (apiKey) {
     try {
       const { GoogleGenerativeAI } = await import("@google/generative-ai");
