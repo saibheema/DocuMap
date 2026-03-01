@@ -8,6 +8,7 @@ COPY packages/shared/package.json ./packages/shared/package.json
 RUN npm install
 
 COPY . .
+RUN npm run build -w @documap/shared
 RUN npm run build -w @documap/api
 
 EXPOSE 4000
