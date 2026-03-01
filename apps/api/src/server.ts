@@ -12,7 +12,31 @@ getFirestore();
 const app = express();
 const port = Number(process.env.PORT || 4000);
 
-app.use(cors());
+const allowedOrigins = [
+  "https://documap-cs-hc-8f0222acc86c43eca440f9a4.web.app",
+  "https://documap-cs-hc-8f0222acc86c43eca440f9a4.firebaseapp.com",
+  "http://localhost:3000",
+  "http://localhost:3001",
+];
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, server-to-server)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: origin ${origin} not allowed`));
+    }
+  },
+  methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+  optionsSuccessStatus: 204,
+};
+
+// Handle all OPTIONS preflight requests before any other middleware
+app.options("*", cors(corsOptions));
+app.use(cors(corsOptions));
 app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 
