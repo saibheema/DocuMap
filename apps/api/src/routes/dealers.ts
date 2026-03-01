@@ -19,6 +19,8 @@ async function requireAuth(req: any, res: any, next: any) {
     return res.status(401).json({ error: "Missing or invalid Authorization header" });
   }
   const token = authHeader.slice(7);
+  // Ensure Firebase Admin is initialized before calling admin.auth()
+  getFirestore();
   try {
     const decoded = await admin.auth().verifyIdToken(token);
     req.uid = decoded.uid;

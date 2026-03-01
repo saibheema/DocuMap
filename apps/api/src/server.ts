@@ -2,8 +2,12 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import { dealersRouter } from "./routes/dealers.js";
+import { getFirestore } from "./lib/firestore.js";
 
 dotenv.config();
+
+// Initialize Firebase Admin SDK at startup (before any requests)
+getFirestore();
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
